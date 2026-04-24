@@ -89,8 +89,9 @@ export async function repairFile(scanId: string, fileId: string): Promise<Repair
 export async function saveRepairedFile(
   assetPath: string,
   destinationPath: string,
+  sourceDevicePath?: string,
 ): Promise<string> {
-  return invoke<string>('save_repaired_file', { assetPath, destinationPath });
+  return invoke<string>('save_repaired_file', { assetPath, destinationPath, sourceDevicePath });
 }
 
 export async function fetchFileAuxiliaryPreview(

@@ -20,9 +20,9 @@ use crate::types::{ByteRun, FileHexPreview, FilePreview};
 // builders below reach them through this `super::` import so the bare-name
 // call sites that existed before the Pass D extraction keep compiling.
 use super::{
-    asset_preview_kind, build_hex_preview_lines, build_source_path, file_uses_recovery_image,
-    guess_mime_type, infer_auxiliary_asset_preview, is_document_previewable_extension,
-    is_text_previewable_extension, HEX_PREVIEW_LINE_WIDTH,
+    asset_preview_kind, build_hex_preview_lines, file_uses_recovery_image, guess_mime_type,
+    infer_auxiliary_asset_preview, is_document_previewable_extension,
+    is_text_previewable_extension, resolve_source_path_under_root, HEX_PREVIEW_LINE_WIDTH,
 };
 
 /// Hard cap on how many bytes we materialise for video/audio asset previews.
@@ -102,7 +102,7 @@ pub fn get_file_media_asset(scan_id: String, file_id: String) -> Result<String, 
         return Ok(asset_path.to_string_lossy().to_string());
     }
 
-    let source_path = super::build_source_path(&root_path, &file);
+    let source_path = super::resolve_source_path_under_root(&root_path, &file)?;
     if !source_path.exists() {
         return Err(format!(
             "Preview source {} is no longer accessible.",
@@ -126,6 +126,7 @@ pub fn get_file_hex_preview(
     start_offset: u64,
     bytes_to_read: u64,
 ) -> Result<FileHexPreview, String> {
+    super::validate_hex_preview_request(bytes_to_read)?;
     let session = super::get_session(&scan_id)?;
     let (root_path, file) = {
         let session = crate::commands::state::lock_or_recover(&session, "scan session (preview)");
@@ -152,6 +153,7 @@ pub fn get_file_auxiliary_hex_preview(
     start_offset: u64,
     bytes_to_read: u64,
 ) -> Result<FileHexPreview, String> {
+    super::validate_hex_preview_request(bytes_to_read)?;
     let session = super::get_session(&scan_id)?;
     let file = {
         let session = crate::commands::state::lock_or_recover(&session, "scan session (preview)");
@@ -319,7 +321,7 @@ pub(crate) fn build_file_preview(
                 message: None,
             });
         } else {
-            let source_path = build_source_path(root_path, file);
+            let source_path = resolve_source_path_under_root(root_path, file)?;
             if !source_path.exists() {
                 return Err(format!(
                     "Preview source {} is no longer accessible.",
@@ -375,7 +377,7 @@ pub(crate) fn build_file_preview(
                 &extension,
             )?
         } else {
-            let source_path = build_source_path(root_path, file);
+            let source_path = resolve_source_path_under_root(root_path, file)?;
             preview::read_document_preview_from_path(&source_path, &extension)?
         };
 
@@ -410,7 +412,7 @@ pub(crate) fn build_file_preview(
                 file.size_bytes,
             )?
         } else {
-            let source_path = build_source_path(root_path, file);
+            let source_path = resolve_source_path_under_root(root_path, file)?;
             preview::read_text_preview_from_path(&source_path)?
         };
 
@@ -439,7 +441,7 @@ pub(crate) fn build_file_preview(
                     _ => Err("Missing source image or byte runs for PDF preview.".into()),
                 }
             } else {
-                let source_path = build_source_path(root_path, file);
+                let source_path = resolve_source_path_under_root(root_path, file)?;
                 std::fs::read(&source_path)
                     .map(Some)
                     .map_err(|e| format!("Cannot read PDF source: {e}"))
@@ -483,7 +485,7 @@ pub(crate) fn build_file_preview(
                 &extension,
             )?
         } else {
-            let source_path = build_source_path(root_path, file);
+            let source_path = resolve_source_path_under_root(root_path, file)?;
             if !source_path.exists() {
                 return Err(format!(
                     "Preview source {} is no longer accessible.",
@@ -709,7 +711,7 @@ pub(crate) fn build_file_hex_preview(
             bytes_to_read,
         )?
     } else {
-        let source_path = build_source_path(root_path, file);
+        let source_path = resolve_source_path_under_root(root_path, file)?;
         preview::read_hex_preview_from_path(&source_path, start_offset, bytes_to_read)?
     };
 

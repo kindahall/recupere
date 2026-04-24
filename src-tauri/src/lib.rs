@@ -195,6 +195,7 @@ mod desktop_runtime {
                 commands::get_license_status,
                 commands::deactivate_license,
                 commands::get_machine_fingerprint,
+                commands::purge_all_pii,
                 commands::get_audit_trail,
                 commands::verify_audit_trail,
                 commands::get_recent_traces,

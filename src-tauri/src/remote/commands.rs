@@ -20,6 +20,8 @@ use crate::types::{
     AiRecoveryBrief, DetectedDevice, ExportProgress, FileHexPreview, FilePreview, RecoveredFile,
     ScanProgress, TechnicalLogEntry,
 };
+use std::net::{Ipv4Addr, Ipv6Addr};
+use url::{Host, Url};
 
 fn fetch_agent(agent_id: &str) -> Result<registry::RemoteAgent, String> {
     registry::get(agent_id).ok_or_else(|| format!("Remote agent `{agent_id}` is not registered."))
@@ -42,50 +44,134 @@ pub(crate) fn validate_remote_base_url(raw: &str) -> Result<String, String> {
         return Err("base_url is required.".into());
     }
 
-    let (scheme, remainder) = if let Some(rest) = trimmed.strip_prefix("https://") {
-        ("https", rest)
-    } else if let Some(rest) = trimmed.strip_prefix("http://") {
-        ("http", rest)
-    } else {
+    let url = Url::parse(trimmed).map_err(|error| format!("base_url is malformed: {error}"))?;
+    let scheme = url.scheme();
+    if scheme != "http" && scheme != "https" {
         return Err("base_url must start with http:// or https://".into());
-    };
-
-    // Extract the host segment. IPv6 literals are bracketed (`[::1]`) so we
-    // take the bracket span verbatim; otherwise we stop at the first `:`
-    // (port), `/` (path), or `?` (query). Manual parse to avoid pulling a URL
-    // crate just for this.
-    let host = if let Some(rest) = remainder.strip_prefix('[') {
-        let closing = rest
-            .find(']')
-            .ok_or_else(|| "base_url has unbalanced `[` bracket.".to_string())?;
-        &remainder[..closing + 2] // include `[` and `]`
-    } else {
-        let host_end = remainder.find([':', '/', '?']).unwrap_or(remainder.len());
-        &remainder[..host_end]
-    };
-    if host.is_empty() {
+    }
+    if let Some(raw_host) = raw_host_segment(trimmed) {
+        if !raw_host.is_ascii() {
+            return Err("base_url host must use an ASCII DNS name.".into());
+        }
+        if raw_host.ends_with('.') {
+            return Err("base_url host must not use a trailing dot.".into());
+        }
+        if raw_host_uses_ambiguous_ipv4_notation(raw_host) {
+            return Err("base_url host must not use ambiguous IPv4 notation.".into());
+        }
+    }
+    if !url.username().is_empty() || url.password().is_some() {
+        return Err("base_url must not include embedded credentials.".into());
+    }
+    if url.host().is_none() {
         return Err("base_url host is empty.".into());
     }
 
-    if scheme == "http" && !is_loopback_host(host) {
+    let host = url.host().expect("host checked above");
+    let loopback = is_loopback_host(host.clone())?;
+    if scheme == "http" && !loopback {
         return Err(
             "HTTPS is required for non-loopback remote agents. Use https:// or expose the agent over SSH tunnel to 127.0.0.1.".into(),
         );
     }
+    if scheme == "https" && is_private_or_link_local_ip(host) {
+        return Err(
+            "HTTPS remote agents must not use private or link-local IP literals. Use a trusted DNS name with TLS, or an SSH tunnel to 127.0.0.1.".into(),
+        );
+    }
 
-    Ok(trimmed.to_string())
+    Ok(url.to_string().trim_end_matches('/').to_string())
 }
 
-fn is_loopback_host(host: &str) -> bool {
-    let lowered = host.to_ascii_lowercase();
-    // `::1` may appear bracketed as `[::1]` in URLs; strip the brackets.
-    let lowered = lowered
-        .strip_prefix('[')
-        .and_then(|s| s.strip_suffix(']'))
-        .unwrap_or(&lowered);
-    matches!(lowered, "127.0.0.1" | "::1" | "localhost")
-        || lowered.starts_with("127.")
-        || lowered == "0:0:0:0:0:0:0:1"
+fn is_loopback_host(host: Host<&str>) -> Result<bool, String> {
+    match host {
+        Host::Domain(domain) => {
+            let domain = domain.to_ascii_lowercase();
+            if domain.ends_with('.') {
+                return Err("base_url host must not use a trailing dot.".into());
+            }
+            if domain.chars().all(|ch| ch.is_ascii_digit()) {
+                return Err("base_url host must not use integer IPv4 notation.".into());
+            }
+            if !domain.is_ascii() {
+                return Err("base_url host must use an ASCII DNS name.".into());
+            }
+            Ok(domain == "localhost")
+        }
+        Host::Ipv4(addr) => Ok(addr.is_loopback()),
+        Host::Ipv6(addr) => {
+            if addr.to_ipv4_mapped().is_some() {
+                return Err("base_url host must not use IPv6-mapped IPv4 literals.".into());
+            }
+            Ok(addr.is_loopback())
+        }
+    }
+}
+
+fn raw_host_segment(raw: &str) -> Option<&str> {
+    let authority = raw.split_once("://")?.1;
+    let authority_end = authority.find(['/', '?', '#']).unwrap_or(authority.len());
+    let authority = &authority[..authority_end];
+    let host_port = authority
+        .rsplit_once('@')
+        .map(|(_, host)| host)
+        .unwrap_or(authority);
+
+    if host_port.starts_with('[') {
+        let end = host_port.find(']')?;
+        Some(&host_port[..=end])
+    } else {
+        let host_end = host_port.find(':').unwrap_or(host_port.len());
+        Some(&host_port[..host_end])
+    }
+}
+
+fn raw_host_uses_ambiguous_ipv4_notation(raw_host: &str) -> bool {
+    if raw_host.starts_with('[') {
+        return false;
+    }
+    let host = raw_host.to_ascii_lowercase();
+    if host.chars().all(|ch| ch.is_ascii_digit()) {
+        return true;
+    }
+
+    let parts: Vec<&str> = host.split('.').collect();
+    if parts.len() <= 1 || !parts.iter().all(|part| is_ipv4_numberish_part(part)) {
+        return false;
+    }
+    parts.len() != 4
+        || parts
+            .iter()
+            .any(|part| part.starts_with("0x") || (part.len() > 1 && part.starts_with('0')))
+}
+
+fn is_ipv4_numberish_part(part: &str) -> bool {
+    if part.is_empty() {
+        return false;
+    }
+    if let Some(hex) = part.strip_prefix("0x") {
+        return !hex.is_empty() && hex.chars().all(|ch| ch.is_ascii_hexdigit());
+    }
+    part.chars().all(|ch| ch.is_ascii_digit())
+}
+
+fn is_private_or_link_local_ip(host: Host<&str>) -> bool {
+    match host {
+        Host::Ipv4(addr) => is_private_or_link_local_v4(addr),
+        Host::Ipv6(addr) => is_private_or_link_local_v6(addr),
+        Host::Domain(_) => false,
+    }
+}
+
+fn is_private_or_link_local_v4(addr: Ipv4Addr) -> bool {
+    addr.is_private() || addr.is_link_local() || addr.is_loopback() || addr.is_unspecified()
+}
+
+fn is_private_or_link_local_v6(addr: Ipv6Addr) -> bool {
+    let segments = addr.segments();
+    let unique_local = (segments[0] & 0xfe00) == 0xfc00;
+    let link_local = (segments[0] & 0xffc0) == 0xfe80;
+    addr.is_loopback() || addr.is_unspecified() || unique_local || link_local
 }
 
 #[cfg_attr(feature = "desktop", tauri::command)]
@@ -233,6 +319,7 @@ pub fn remote_get_file_hex_preview(
     start_offset: u64,
     bytes_to_read: u64,
 ) -> Result<FileHexPreview, String> {
+    crate::commands::validate_hex_preview_request(bytes_to_read)?;
     let agent = fetch_agent(&agent_id)?;
     client::get_file_hex_preview(&agent, &scan_id, &file_id, start_offset, bytes_to_read)
 }
@@ -321,9 +408,8 @@ pub fn remote_export_results_csv(
 //
 // `remote_download_file` is the lower-level entry point used to pull
 // agent-generated artifacts. The agent refuses paths outside its controlled
-// artifact workspaces. It supports resumable downloads automatically — if
-// `local_destination_path` already exists with bytes, the agent receives
-// `Range: bytes=<existing>-` and only sends the remainder.
+// artifact workspaces. Existing local files are replaced from byte zero so
+// stale or attacker-created bytes cannot be appended to trusted output.
 
 #[cfg_attr(feature = "desktop", tauri::command)]
 pub fn remote_download_file(
@@ -351,6 +437,7 @@ pub fn remote_pull_recovered_file(
     let pulled = client::pull_recovered_file(&agent, &scan_id, &file_id)?;
     let local = std::path::PathBuf::from(&local_destination_path);
     let bytes_written = client::download_file(&agent, &pulled.path, &local, |_, _| {})?;
+    client::verify_downloaded_file(&local, pulled.size_bytes, &pulled.sha256)?;
     // Best-effort cleanup of the server-side temp file. We don't surface
     // delete failures to the caller — the file ends up in the agent's temp
     // dir which is wiped on reboot anyway.
@@ -406,6 +493,10 @@ mod tests {
 
     #[test]
     fn accepts_http_only_for_loopback() {
+        assert_eq!(
+            validate_remote_base_url("http://127.0.0.1:7878/").unwrap(),
+            "http://127.0.0.1:7878"
+        );
         assert!(validate_remote_base_url("http://127.0.0.1:7878").is_ok());
         assert!(validate_remote_base_url("http://localhost:7878").is_ok());
         assert!(validate_remote_base_url("http://[::1]:7878").is_ok());
@@ -424,6 +515,22 @@ mod tests {
         let err = validate_remote_base_url("http://203.0.113.5:7878")
             .expect_err("plain http to public IP should be rejected");
         assert!(err.contains("HTTPS is required"), "got: {err}");
+    }
+
+    #[test]
+    fn rejects_ambiguous_loopback_forms() {
+        assert!(validate_remote_base_url("http://localhost.:7878").is_err());
+        assert!(validate_remote_base_url("http://2130706433:7878").is_err());
+        assert!(validate_remote_base_url("http://0177.0.0.1:7878").is_err());
+        assert!(validate_remote_base_url("http://0x7f.0.0.1:7878").is_err());
+        assert!(validate_remote_base_url("http://[::ffff:127.0.0.1]:7878").is_err());
+    }
+
+    #[test]
+    fn rejects_https_private_ip_literals() {
+        assert!(validate_remote_base_url("https://10.0.0.2:7878").is_err());
+        assert!(validate_remote_base_url("https://[fe80::1]:7878").is_err());
+        assert!(validate_remote_base_url("https://agent.example.com").is_ok());
     }
 
     #[test]

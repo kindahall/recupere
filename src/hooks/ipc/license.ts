@@ -10,7 +10,9 @@ export interface LicenseInfo {
     | 'wrong_machine'
     | 'invalid_signature'
     | 'malformed'
-    | 'storage_error';
+    | 'storage_error'
+    | 'clock_error'
+    | 'rate_limited';
   email?: string;
   tier?: string;
   expiresAt?: number;
@@ -79,6 +81,25 @@ export async function deactivateLicense(): Promise<void> {
     return;
   }
   await invoke('deactivate_license');
+}
+
+export interface PiiPurgeResult {
+  license_deleted: boolean;
+  history_purged: boolean;
+  audit_cleared: boolean;
+  recent_traces_cleared: boolean;
+}
+
+export async function purgeAllPii(): Promise<PiiPurgeResult> {
+  if (__ALLOW_BROWSER_PREVIEW__ && !isTauri()) {
+    return {
+      license_deleted: true,
+      history_purged: true,
+      audit_cleared: true,
+      recent_traces_cleared: true,
+    };
+  }
+  return invoke<PiiPurgeResult>('purge_all_pii');
 }
 
 export async function getMachineFingerprint(): Promise<string> {

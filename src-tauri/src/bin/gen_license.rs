@@ -1,10 +1,12 @@
 // ============================================================================
 // Récupère — Dev license generator
 // ============================================================================
-// Mints a Pro license signed with the development Ed25519 seed that matches
-// the placeholder pubkey embedded in `license/mod.rs`. Usage:
+// Mints a Pro license signed with a local development Ed25519 seed. Usage:
 //
 //   cargo run --bin gen_license -- you@example.com
+//
+// The seed is read from `RECUPERE_DEV_LICENSE_SEED_HEX` or a gitignored
+// `.dev-license-seed` file containing 64 lowercase hex characters.
 //
 // The generated key is bound to the *current* machine's fingerprint, so it
 // will only validate when the same machine runs Récupère. Run it on the
@@ -13,8 +15,10 @@
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use ed25519_dalek::{Signer, SigningKey};
-use recupere_lib::license::{compute_machine_fingerprint, DEV_PLACEHOLDER_SIGNING_SEED};
+use recupere_lib::license::compute_machine_fingerprint;
 use std::env;
+use std::fs;
+use std::path::PathBuf;
 
 fn main() {
     let email = env::args()
@@ -36,7 +40,8 @@ fn main() {
     });
     let payload_bytes = serde_json::to_vec(&payload).expect("serialize payload");
 
-    let signing_key = SigningKey::from_bytes(&DEV_PLACEHOLDER_SIGNING_SEED);
+    let signing_seed = load_dev_signing_seed();
+    let signing_key = SigningKey::from_bytes(&signing_seed);
     let signature = signing_key.sign(&payload_bytes);
 
     let payload_b64 = URL_SAFE_NO_PAD.encode(&payload_bytes);
@@ -52,4 +57,57 @@ fn main() {
     println!();
     println!("{key}");
     println!();
+}
+
+fn load_dev_signing_seed() -> [u8; 32] {
+    if let Ok(seed) = env::var("RECUPERE_DEV_LICENSE_SEED_HEX") {
+        return parse_seed_hex(seed.trim()).unwrap_or_else(|error| panic!("{error}"));
+    }
+
+    for path in dev_seed_candidates() {
+        if let Ok(seed) = fs::read_to_string(&path) {
+            return parse_seed_hex(seed.trim()).unwrap_or_else(|error| {
+                panic!(
+                    "Invalid dev license seed at {}: {error}",
+                    path.to_string_lossy()
+                )
+            });
+        }
+    }
+
+    panic!(
+        "Missing dev license seed. Create a gitignored `.dev-license-seed` file \
+         with 64 lowercase hex chars, or set RECUPERE_DEV_LICENSE_SEED_HEX."
+    );
+}
+
+fn dev_seed_candidates() -> Vec<PathBuf> {
+    let current = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    vec![
+        current.join(".dev-license-seed"),
+        current.join("src-tauri").join(".dev-license-seed"),
+    ]
+}
+
+fn parse_seed_hex(hex: &str) -> Result<[u8; 32], String> {
+    let bytes = hex.as_bytes();
+    if bytes.len() != 64 {
+        return Err("expected exactly 64 lowercase hex characters".into());
+    }
+
+    let mut out = [0_u8; 32];
+    for index in 0..32 {
+        let hi = hex_nibble(bytes[index * 2])?;
+        let lo = hex_nibble(bytes[index * 2 + 1])?;
+        out[index] = (hi << 4) | lo;
+    }
+    Ok(out)
+}
+
+fn hex_nibble(byte: u8) -> Result<u8, String> {
+    match byte {
+        b'0'..=b'9' => Ok(byte - b'0'),
+        b'a'..=b'f' => Ok(byte - b'a' + 10),
+        _ => Err("seed must use lowercase hex characters only".into()),
+    }
 }

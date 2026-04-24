@@ -271,21 +271,28 @@ async function main() {
   const isTagRelease = isVersionTagRelease();
   const strictRelease = isStrictReleaseGate();
   const licensePubkey = process.env.RECUPERE_LICENSE_PUBKEY_HEX ?? '';
+  const devPlaceholderPubkey =
+    '3c53dd0a122c2b684148c1754f9462e54acb1c52cc1e1265ff3e3780d474b83c';
   const hasLicensePubkey = /^[0-9a-f]{64}$/.test(licensePubkey);
+  const hasProductionLicensePubkey =
+    hasLicensePubkey &&
+    !/^0{64}$/.test(licensePubkey) &&
+    licensePubkey !== devPlaceholderPubkey;
 
   addCheck(
     'license-public-key-env',
     strictRelease || args.requireLicensePubkey ? 'error' : 'warning',
-    hasLicensePubkey,
+    hasProductionLicensePubkey,
     strictRelease || args.requireLicensePubkey
-      ? 'Release bundle builds require RECUPERE_LICENSE_PUBKEY_HEX with exactly 64 lowercase hex characters.'
-      : hasLicensePubkey
+      ? 'Release bundle builds require RECUPERE_LICENSE_PUBKEY_HEX with a real 64-char lowercase hex public key, not zero or the dev placeholder.'
+      : hasProductionLicensePubkey
         ? 'License public key is present for release bundle compilation.'
         : 'No RECUPERE_LICENSE_PUBKEY_HEX detected. Generic preflight stays green, but release bundle compilation will be refused by src-tauri/build.rs.',
     {
       strictRelease,
       requireLicensePubkey: args.requireLicensePubkey,
       configured: hasLicensePubkey,
+      productionKey: hasProductionLicensePubkey,
     },
   );
 

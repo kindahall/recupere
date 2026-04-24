@@ -32,6 +32,7 @@ interface RepairControlsProps {
   fileId: string;
   fileName: string;
   extension: string;
+  sourceDevicePath?: string;
   onRepairedAsset?: (url: string) => void;
 }
 
@@ -40,6 +41,7 @@ export function RepairControls({
   fileId,
   fileName,
   extension,
+  sourceDevicePath,
   onRepairedAsset,
 }: RepairControlsProps) {
   const { t } = useTranslation();
@@ -80,7 +82,7 @@ export function RepairControls({
         title: t('results.repair_save_title', 'Enregistrer le fichier réparé'),
       });
       if (!dest) return;
-      await saveRepairedFile(result.asset_path, dest as string);
+      await saveRepairedFile(result.asset_path, dest as string, sourceDevicePath);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }

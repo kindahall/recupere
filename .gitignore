@@ -40,6 +40,8 @@ updater.key
 updater.key.pub
 *.tauri-updater-key
 .release-secrets/
+.dev-license-seed
+src-tauri/.dev-license-seed
 
 # Fuzzing artifacts — crashes get triaged out of band, corpus can stay in
 # a branch-specific workflow (see docs/fuzzing.md).

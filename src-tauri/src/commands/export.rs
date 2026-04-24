@@ -17,8 +17,11 @@
 //     `#[tauri::command]` entrypoints left.
 // ============================================================================
 
+use rand::RngCore;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs;
+use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -416,6 +419,17 @@ pub(super) fn run_export_session(
             return;
         }
     };
+    #[cfg(not(test))]
+    {
+        let post_create_validation = validate_export_destination(
+            canonical_destination_root.to_string_lossy().to_string(),
+            root_path.to_string_lossy().to_string(),
+        );
+        if !post_create_validation.is_safe {
+            fail_export_session(&session, post_create_validation.message);
+            return;
+        }
+    }
 
     update_export_progress(&session, |progress| {
         progress.status = "exporting".into();
@@ -527,13 +541,15 @@ pub(super) fn run_export_session(
             }
         };
 
-        let copied_bytes = match export_recovered_file(&root_path, &file, &target_path) {
-            Ok(bytes) => bytes,
-            Err(error) => {
-                push_export_error(&session, file.id.clone(), file.name.clone(), error);
-                continue;
-            }
-        };
+        let allow_replace = conflict_strategy == "overwrite";
+        let copied_bytes =
+            match export_recovered_file(&root_path, &file, &target_path, allow_replace) {
+                Ok(bytes) => bytes,
+                Err(error) => {
+                    push_export_error(&session, file.id.clone(), file.name.clone(), error);
+                    continue;
+                }
+            };
         let resource_fork_sidecar =
             match export_resource_fork_sidecar(&file, &target_path, &conflict_strategy) {
                 Ok(sidecar) => sidecar,
@@ -594,8 +610,10 @@ pub(super) fn run_export_session(
             let verification = if file_uses_recovery_image(&file) {
                 verify_reconstructed_export(&target_path, file.size_bytes)
             } else {
-                let source_path = build_source_path(&root_path, &file);
-                verify_exported_file(&source_path, &target_path)
+                match resolve_source_path_under_root(&root_path, &file) {
+                    Ok(source_path) => verify_exported_file(&source_path, &target_path),
+                    Err(error) => Err(error),
+                }
             };
 
             match verification {
@@ -1293,10 +1311,10 @@ footer {{ margin-top: 48px; padding-top: 16px; border-top: 1px solid #e2e8f0; fo
 </body></html>"#
     ));
 
-    let report_dir = std::env::temp_dir().join("recupere").join("reports");
-    let _ = fs::create_dir_all(&report_dir);
-    let report_path = report_dir.join(format!("report-{scan_id}.html"));
-    fs::write(&report_path, html.as_bytes()).map_err(|e| format!("Cannot write report: {e}"))?;
+    let report_dir = app_reports_dir();
+    fs::create_dir_all(&report_dir).map_err(|e| format!("Cannot create report directory: {e}"))?;
+    let report_path = report_dir.join(format!("report-{scan_id}-{}.html", random_hex_suffix()));
+    write_private_file_atomically(&report_path, html.as_bytes(), "recovery report")?;
     Ok(report_path.to_string_lossy().to_string())
 }
 
@@ -1402,23 +1420,79 @@ pub fn export_results_csv(scan_id: String) -> Result<String, String> {
         ));
     }
 
-    let report_dir = std::env::temp_dir().join("recupere").join("reports");
-    let _ = fs::create_dir_all(&report_dir);
-    let path = report_dir.join(format!("results-{scan_id}.csv"));
-    fs::write(&path, csv.as_bytes()).map_err(|e| format!("Cannot write CSV: {e}"))?;
+    let report_dir = app_reports_dir();
+    fs::create_dir_all(&report_dir).map_err(|e| format!("Cannot create report directory: {e}"))?;
+    let path = report_dir.join(format!("results-{scan_id}-{}.csv", random_hex_suffix()));
+    write_private_file_atomically(&path, csv.as_bytes(), "CSV report")?;
     Ok(path.to_string_lossy().to_string())
 }
 
 fn csv_cell(value: &str) -> String {
     let mut safe = value.replace('"', "\"\"");
-    if matches!(safe.chars().next(), Some('=' | '+' | '-' | '@')) {
+    if matches!(
+        safe.chars().next(),
+        Some('=' | '+' | '-' | '@' | '\t' | '\r')
+    ) {
         safe.insert(0, '\'');
     }
     format!("\"{safe}\"")
 }
 
+fn app_reports_dir() -> PathBuf {
+    dirs::data_dir()
+        .unwrap_or_else(std::env::temp_dir)
+        .join("recupere")
+        .join("reports")
+}
+
 fn current_timestamp_rfc3339() -> String {
     chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)
+}
+
+fn random_hex_suffix() -> String {
+    let mut bytes = [0_u8; 16];
+    rand::thread_rng().fill_bytes(&mut bytes);
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn write_private_file_atomically(path: &Path, bytes: &[u8], label: &str) -> Result<(), String> {
+    let parent = path.parent().ok_or_else(|| {
+        format!(
+            "The selected {label} destination {} has no writable parent directory.",
+            path.to_string_lossy()
+        )
+    })?;
+    fs::create_dir_all(parent).map_err(|error| {
+        format!(
+            "Unable to create {label} directory {}: {}",
+            parent.to_string_lossy(),
+            error
+        )
+    })?;
+
+    let temp_path = temporary_sibling_path(path)?;
+    {
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = options.open(&temp_path).map_err(|error| {
+            format!(
+                "Unable to create temporary {label} {}: {}",
+                temp_path.to_string_lossy(),
+                error
+            )
+        })?;
+        file.write_all(bytes)
+            .map_err(|error| format!("Unable to write {label}: {error}"))?;
+        file.flush()
+            .map_err(|error| format!("Unable to flush {label}: {error}"))?;
+    }
+
+    finalize_temporary_file(&temp_path, path, false)
 }
 
 fn html_escape(s: &str) -> String {
@@ -2176,6 +2250,36 @@ pub(crate) fn build_source_path(root_path: &Path, file: &RecoveredFile) -> PathB
     source_path
 }
 
+pub(crate) fn resolve_source_path_under_root(
+    root_path: &Path,
+    file: &RecoveredFile,
+) -> Result<PathBuf, String> {
+    let source_path = build_source_path(root_path, file);
+    let canonical_root = fs::canonicalize(root_path).map_err(|error| {
+        format!(
+            "Unable to resolve source root {}: {}",
+            root_path.to_string_lossy(),
+            error
+        )
+    })?;
+    let canonical_source = fs::canonicalize(&source_path).map_err(|error| {
+        format!(
+            "Unable to resolve source file {}: {}",
+            source_path.to_string_lossy(),
+            error
+        )
+    })?;
+
+    if !canonical_source.starts_with(&canonical_root) {
+        return Err(format!(
+            "Refused to read source file outside the scan root: {}.",
+            canonical_source.to_string_lossy()
+        ));
+    }
+
+    Ok(canonical_source)
+}
+
 pub(crate) fn estimated_export_payload_bytes(file: &RecoveredFile) -> u64 {
     file.size_bytes
         .saturating_add(
@@ -2258,6 +2362,25 @@ pub(crate) fn export_recovered_file(
     root_path: &Path,
     file: &RecoveredFile,
     target_path: &Path,
+    allow_replace: bool,
+) -> Result<u64, String> {
+    let temp_path = temporary_sibling_path(target_path)?;
+    let result = export_recovered_file_to_path(root_path, file, &temp_path);
+    let written = match result {
+        Ok(written) => written,
+        Err(error) => {
+            let _ = fs::remove_file(&temp_path);
+            return Err(error);
+        }
+    };
+    finalize_temporary_file(&temp_path, target_path, allow_replace)?;
+    Ok(written)
+}
+
+fn export_recovered_file_to_path(
+    root_path: &Path,
+    file: &RecoveredFile,
+    target_path: &Path,
 ) -> Result<u64, String> {
     if file_uses_recovery_image(file) {
         let image_path = file.source_image_path.as_ref().ok_or_else(|| {
@@ -2288,7 +2411,7 @@ pub(crate) fn export_recovered_file(
             )
         })
     } else {
-        let source_path = build_source_path(root_path, file);
+        let source_path = resolve_source_path_under_root(root_path, file)?;
         fs::copy(&source_path, target_path).map_err(|error| {
             format!(
                 "Unable to copy {} to {}: {}",
@@ -2327,20 +2450,25 @@ pub(crate) fn export_resource_fork_sidecar(
         }
     };
 
-    let written = imaging::materialize_byte_runs(
+    let temp_path = temporary_sibling_path(&sidecar_path)?;
+    let written = match imaging::materialize_byte_runs(
         Path::new(image_path),
         &resource_fork.byte_runs,
         resource_fork.size_bytes,
-        &sidecar_path,
-    )
-    .map_err(|error| {
-        format!(
-            "Unable to export the HFS+ resource-fork sidecar for {} into {}: {}",
-            file.name,
-            sidecar_path.to_string_lossy(),
-            error
-        )
-    })?;
+        &temp_path,
+    ) {
+        Ok(written) => written,
+        Err(error) => {
+            let _ = fs::remove_file(&temp_path);
+            return Err(format!(
+                "Unable to export the HFS+ resource-fork sidecar for {} into {}: {}",
+                file.name,
+                sidecar_path.to_string_lossy(),
+                error
+            ));
+        }
+    };
+    finalize_temporary_file(&temp_path, &sidecar_path, conflict_strategy == "overwrite")?;
 
     Ok(Some((sidecar_path, written)))
 }
@@ -2375,21 +2503,26 @@ pub(crate) fn export_alternate_data_stream_sidecars(
             }
         };
 
-        let written = imaging::materialize_byte_runs(
+        let temp_path = temporary_sibling_path(&sidecar_path)?;
+        let written = match imaging::materialize_byte_runs(
             Path::new(image_path),
             &stream.byte_runs,
             stream.size_bytes,
-            &sidecar_path,
-        )
-        .map_err(|error| {
-            format!(
-                "Unable to export the NTFS alternate-data-stream sidecar `{}` for {} into {}: {}",
-                stream.name,
-                file.name,
-                sidecar_path.to_string_lossy(),
-                error
-            )
-        })?;
+            &temp_path,
+        ) {
+            Ok(written) => written,
+            Err(error) => {
+                let _ = fs::remove_file(&temp_path);
+                return Err(format!(
+                    "Unable to export the NTFS alternate-data-stream sidecar `{}` for {} into {}: {}",
+                    stream.name,
+                    file.name,
+                    sidecar_path.to_string_lossy(),
+                    error
+                ));
+            }
+        };
+        finalize_temporary_file(&temp_path, &sidecar_path, conflict_strategy == "overwrite")?;
 
         exported.push((sidecar_path, written, stream.name.clone()));
     }
@@ -2425,9 +2558,48 @@ pub(crate) fn safe_export_file_name(file_name: &str) -> String {
     let trimmed = sanitized.trim_matches(['.', ' ']);
     if trimmed.is_empty() {
         "recovered-file".to_string()
+    } else if is_windows_reserved_file_name(trimmed) {
+        match trimmed.split_once('.') {
+            Some((stem, extension)) => format!("{stem}_.{extension}"),
+            None => format!("{trimmed}_"),
+        }
     } else {
         trimmed.to_string()
     }
+}
+
+fn is_windows_reserved_file_name(file_name: &str) -> bool {
+    let stem = file_name
+        .split_once('.')
+        .map(|(stem, _)| stem)
+        .unwrap_or(file_name)
+        .trim_end_matches(['.', ' '])
+        .to_ascii_uppercase();
+    matches!(
+        stem.as_str(),
+        "CON"
+            | "PRN"
+            | "AUX"
+            | "NUL"
+            | "COM1"
+            | "COM2"
+            | "COM3"
+            | "COM4"
+            | "COM5"
+            | "COM6"
+            | "COM7"
+            | "COM8"
+            | "COM9"
+            | "LPT1"
+            | "LPT2"
+            | "LPT3"
+            | "LPT4"
+            | "LPT5"
+            | "LPT6"
+            | "LPT7"
+            | "LPT8"
+            | "LPT9"
+    )
 }
 
 pub(crate) fn resolve_target_path(
@@ -2442,14 +2614,7 @@ pub(crate) fn resolve_target_path(
         "rename" => Ok(Some(unique_target_path(target_path))),
         "skip" => Ok(None),
         "overwrite" => {
-            if target_path.is_file() {
-                fs::remove_file(target_path).map_err(|error| {
-                    format!(
-                        "Unable to overwrite existing file {}: {}",
-                        target_path.to_string_lossy(),
-                        error
-                    )
-                })?;
+            if symlink_metadata_is_file_or_symlink(target_path)? {
                 Ok(Some(target_path.to_path_buf()))
             } else {
                 Err(format!(
@@ -2460,6 +2625,85 @@ pub(crate) fn resolve_target_path(
         }
         other => Err(format!("Unsupported conflict strategy `{other}`.")),
     }
+}
+
+fn symlink_metadata_is_file_or_symlink(path: &Path) -> Result<bool, String> {
+    let metadata = fs::symlink_metadata(path).map_err(|error| {
+        format!(
+            "Unable to inspect existing destination {}: {}",
+            path.to_string_lossy(),
+            error
+        )
+    })?;
+    let file_type = metadata.file_type();
+    Ok(file_type.is_file() || file_type.is_symlink())
+}
+
+fn temporary_sibling_path(target_path: &Path) -> Result<PathBuf, String> {
+    let parent = target_path.parent().ok_or_else(|| {
+        format!(
+            "The target {} has no writable parent directory.",
+            target_path.to_string_lossy()
+        )
+    })?;
+    let file_name = target_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("export");
+
+    for _ in 0..16 {
+        let candidate = parent.join(format!(".{file_name}.{}.tmp", random_hex_suffix()));
+        if !candidate.exists() {
+            return Ok(candidate);
+        }
+    }
+
+    Err(format!(
+        "Unable to allocate a temporary path next to {}.",
+        target_path.to_string_lossy()
+    ))
+}
+
+fn finalize_temporary_file(
+    temp_path: &Path,
+    target_path: &Path,
+    allow_replace: bool,
+) -> Result<(), String> {
+    if let Ok(metadata) = fs::symlink_metadata(target_path) {
+        let file_type = metadata.file_type();
+        if file_type.is_dir() {
+            let _ = fs::remove_file(temp_path);
+            return Err(format!(
+                "Refused to replace directory {}.",
+                target_path.to_string_lossy()
+            ));
+        }
+        if !allow_replace {
+            let _ = fs::remove_file(temp_path);
+            return Err(format!(
+                "Refused to replace existing destination {}.",
+                target_path.to_string_lossy()
+            ));
+        }
+        fs::remove_file(target_path).map_err(|error| {
+            let _ = fs::remove_file(temp_path);
+            format!(
+                "Unable to replace existing destination {}: {}",
+                target_path.to_string_lossy(),
+                error
+            )
+        })?;
+    }
+
+    fs::rename(temp_path, target_path).map_err(|error| {
+        let _ = fs::remove_file(temp_path);
+        format!(
+            "Unable to finalize {} from temporary file {}: {}",
+            target_path.to_string_lossy(),
+            temp_path.to_string_lossy(),
+            error
+        )
+    })
 }
 
 fn unique_target_path(target_path: &Path) -> PathBuf {
@@ -2498,7 +2742,39 @@ pub(crate) fn verify_exported_file(source_path: &Path, target_path: &Path) -> Re
         ));
     }
 
+    let source_hash = sha256_file(source_path)?;
+    let target_hash = sha256_file(target_path)?;
+    if source_hash != target_hash {
+        return Err("sha256 mismatch between source and destination".into());
+    }
+
     Ok(())
+}
+
+fn sha256_file(path: &Path) -> Result<String, String> {
+    let mut file = fs::File::open(path).map_err(|error| {
+        format!(
+            "unable to open {} for SHA-256 verification: {}",
+            path.to_string_lossy(),
+            error
+        )
+    })?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let read = file.read(&mut buffer).map_err(|error| {
+            format!(
+                "unable to read {} for SHA-256 verification: {}",
+                path.to_string_lossy(),
+                error
+            )
+        })?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
 }
 
 pub(crate) fn verify_reconstructed_export(

@@ -28,8 +28,9 @@ use axum::{
     Json, Router,
 };
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::io::SeekFrom;
+use std::io::{Read, SeekFrom};
 use std::net::SocketAddr;
 use std::path::{Path as StdPath, PathBuf};
 use std::sync::Arc;
@@ -594,16 +595,20 @@ fn canonical_regular_file(raw_path: &str) -> Result<PathBuf, (StatusCode, String
 }
 
 fn controlled_artifact_roots() -> Vec<PathBuf> {
-    [
+    let mut roots = vec![
         std::env::temp_dir().join("recupere").join("reports"),
         std::env::temp_dir()
             .join("recupere-workspace")
             .join("previews"),
         std::env::temp_dir().join("recupere-agent-pull"),
-    ]
-    .iter()
-    .filter_map(|path| canonical_existing_dir(path).ok())
-    .collect()
+    ];
+    if let Some(data_dir) = dirs::data_dir() {
+        roots.push(data_dir.join("recupere").join("reports"));
+    }
+    roots
+        .iter()
+        .filter_map(|path| canonical_existing_dir(path).ok())
+        .collect()
 }
 
 fn canonical_existing_dir(path: &StdPath) -> Result<PathBuf, (StatusCode, String)> {
@@ -628,6 +633,7 @@ struct PullResponse {
     path: String,
     name: String,
     size_bytes: u64,
+    sha256: String,
 }
 
 async fn pull_recovered_file(Path((scan_id, file_id)): Path<(String, String)>) -> Response {
@@ -688,6 +694,7 @@ fn pull_recovered_file_blocking(scan_id: String, file_id: String) -> Result<Pull
         .ok_or_else(|| "server-side export produced no file".to_string())?;
     let metadata = std::fs::metadata(&pulled)
         .map_err(|error| format!("unable to stat pulled file: {error}"))?;
+    let sha256 = sha256_file(&pulled)?;
     let name = pulled
         .file_name()
         .and_then(|os| os.to_str())
@@ -698,7 +705,25 @@ fn pull_recovered_file_blocking(scan_id: String, file_id: String) -> Result<Pull
         path: pulled.to_string_lossy().to_string(),
         name,
         size_bytes: metadata.len(),
+        sha256,
     })
+}
+
+fn sha256_file(path: &std::path::Path) -> Result<String, String> {
+    let mut file = std::fs::File::open(path)
+        .map_err(|error| format!("unable to hash pulled file: {error}"))?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let read = file
+            .read(&mut buffer)
+            .map_err(|error| format!("unable to read pulled file for hashing: {error}"))?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
 }
 
 fn first_regular_file(root: &std::path::Path) -> Option<PathBuf> {

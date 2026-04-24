@@ -26,7 +26,6 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
     fs,
-    io::Write,
     path::PathBuf,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -52,19 +51,15 @@ use std::{
 // Then export the raw 32-byte public key as hex and pass it via the env var
 // when building: RECUPERE_LICENSE_PUBKEY_HEX=<64-hex> cargo build --release
 
-/// Ed25519 signing seed used by `bin/gen_license.rs` to mint dev licenses that
-/// validate against `DEV_PLACEHOLDER_PUBLIC_KEY`. Exposed so the gen_license
-/// binary and the runtime guard stay provably in sync.
-pub const DEV_PLACEHOLDER_SIGNING_SEED: [u8; 32] = [
-    0x52, 0xc4, 0xe1, 0xf7, 0x0a, 0x9b, 0x33, 0x6d, 0x12, 0x88, 0x5c, 0x44, 0x29, 0x1e, 0x6b, 0xa0,
-    0xfd, 0x77, 0x3a, 0x91, 0xc6, 0x05, 0xee, 0x18, 0xb4, 0x2f, 0x8d, 0x0c, 0x97, 0x63, 0x21, 0xae,
-];
-
-/// Ed25519 public key derived from `DEV_PLACEHOLDER_SIGNING_SEED`. A release
+/// Ed25519 public key used only for development builds. The matching signing
+/// seed is intentionally not part of the runtime API; `bin/gen_license.rs`
+/// reads it from a local, gitignored `.dev-license-seed` file when a developer
+/// explicitly needs to mint a local test key.
+///
+/// A release
 /// binary that still embeds this value is refusing to start via
 /// `ensure_production_public_key()`. Covered by
-/// `dev_placeholder_public_key_matches_dev_seed` to detect drift if either
-/// the seed or the key ever changes.
+/// `dev_license_round_trips_against_placeholder_public_key` in test builds.
 pub const DEV_PLACEHOLDER_PUBLIC_KEY: [u8; 32] = [
     0x3c, 0x53, 0xdd, 0x0a, 0x12, 0x2c, 0x2b, 0x68, 0x41, 0x48, 0xc1, 0x75, 0x4f, 0x94, 0x62, 0xe5,
     0x4a, 0xcb, 0x1c, 0x52, 0xcc, 0x1e, 0x12, 0x65, 0xff, 0x3e, 0x37, 0x80, 0xd4, 0x74, 0xb8, 0x3c,
@@ -203,35 +198,126 @@ impl LicenseInfo {
 // ---------------------------------------------------------------------------
 
 /// Compute a stable, anonymous fingerprint of the current machine.
-/// Combines CPU vendor, primary MAC address, and hostname.
+///
+/// The primary signal is an OS-managed machine identifier (macOS
+/// IOPlatformUUID, Windows ComputerSystemProduct UUID, Linux machine-id).
+/// Hostname/MAC/cpu_count are used only as a compatibility fallback when the
+/// platform identifier cannot be read. Raw identifiers are never persisted; only
+/// this SHA-256 digest leaves the function.
 pub fn compute_machine_fingerprint() -> String {
     let mut hasher = Sha256::new();
+    hasher.update(b"recupere-license-fingerprint-v2|");
 
-    // CPU vendor & arch
-    hasher.update(std::env::consts::ARCH.as_bytes());
-    hasher.update(b"|");
-    hasher.update(std::env::consts::OS.as_bytes());
-    hasher.update(b"|");
-
-    // Hostname (best effort)
-    let hostname = sysinfo::System::host_name().unwrap_or_else(|| "unknown".into());
-    hasher.update(hostname.as_bytes());
-    hasher.update(b"|");
-
-    // Primary MAC address (best effort)
-    if let Ok(Some(mac)) = mac_address::get_mac_address() {
-        hasher.update(mac.bytes());
-    } else {
-        hasher.update(b"no-mac");
+    for (name, value) in collect_machine_fingerprint_signals() {
+        hasher.update(name.as_bytes());
+        hasher.update(b"=");
+        hasher.update(value.as_bytes());
+        hasher.update(b"|");
     }
-    hasher.update(b"|");
-
-    // System CPU count as a stable integer signal
-    let cpu_count = num_cpus::get();
-    hasher.update(cpu_count.to_le_bytes());
 
     let digest = hasher.finalize();
     format!("{:x}", digest)
+}
+
+fn collect_machine_fingerprint_signals() -> Vec<(&'static str, String)> {
+    let mut signals = vec![
+        ("os", std::env::consts::OS.to_string()),
+        ("arch", std::env::consts::ARCH.to_string()),
+    ];
+
+    if let Some(machine_id) = platform_machine_identifier() {
+        signals.push(("platform_machine_id", machine_id));
+        return signals;
+    }
+
+    let hostname = sysinfo::System::host_name().unwrap_or_else(|| "unknown".into());
+    signals.push(("hostname_fallback", normalize_identifier(&hostname)));
+
+    if let Ok(Some(mac)) = mac_address::get_mac_address() {
+        signals.push(("mac_fallback", mac.to_string().to_ascii_lowercase()));
+    } else {
+        signals.push(("mac_fallback", "no-mac".into()));
+    }
+
+    signals.push(("cpu_count_fallback", num_cpus::get().to_string()));
+    signals
+}
+
+fn normalize_identifier(value: &str) -> String {
+    value.trim().to_ascii_lowercase()
+}
+
+fn non_empty_identifier(value: String) -> Option<String> {
+    let normalized = normalize_identifier(&value);
+    if normalized.is_empty()
+        || normalized == "unknown"
+        || normalized == "none"
+        || normalized.chars().all(|ch| ch == '0' || ch == '-')
+    {
+        None
+    } else {
+        Some(normalized)
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn platform_machine_identifier() -> Option<String> {
+    for path in ["/etc/machine-id", "/var/lib/dbus/machine-id"] {
+        if let Ok(value) = fs::read_to_string(path) {
+            if let Some(identifier) = non_empty_identifier(value) {
+                return Some(identifier);
+            }
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "macos")]
+fn platform_machine_identifier() -> Option<String> {
+    let output = std::process::Command::new("ioreg")
+        .args(["-rd1", "-c", "IOPlatformExpertDevice"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    for line in text.lines() {
+        if let Some((_, value)) = line.split_once("IOPlatformUUID") {
+            let value = value
+                .trim()
+                .trim_start_matches('=')
+                .trim()
+                .trim_matches('"')
+                .to_string();
+            if let Some(identifier) = non_empty_identifier(value) {
+                return Some(identifier);
+            }
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "windows")]
+fn platform_machine_identifier() -> Option<String> {
+    let output = std::process::Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "(Get-CimInstance Win32_ComputerSystemProduct).UUID",
+        ])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    non_empty_identifier(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+fn platform_machine_identifier() -> Option<String> {
+    None
 }
 
 // ---------------------------------------------------------------------------
@@ -326,10 +412,14 @@ fn verify_license_with_key(
     };
 
     // Check expiration
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+    let now =
+        match SystemTime::now().duration_since(UNIX_EPOCH) {
+            Ok(duration) => duration.as_secs(),
+            Err(_) => return LicenseInfo::invalid(
+                "clock_error",
+                "System clock is before the Unix epoch; license validity cannot be checked safely.",
+            ),
+        };
     if let Some(exp) = payload.exp {
         if now >= exp {
             return LicenseInfo::invalid(
@@ -359,41 +449,82 @@ fn verify_license_with_key(
 // Persistence
 // ---------------------------------------------------------------------------
 
-fn license_storage_path() -> PathBuf {
+const LICENSE_KEYRING_SERVICE: &str = "com.recupere.desktop";
+const LICENSE_KEYRING_ACCOUNT: &str = "recupere-pro-license";
+
+fn legacy_license_storage_path() -> PathBuf {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
         .unwrap_or_else(|_| ".".into());
     PathBuf::from(home).join(".recupere").join("license.key")
 }
 
-/// Save the license key to disk for future launches.
-pub fn save_license(key: &str) -> Result<(), String> {
-    let path = license_storage_path();
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| format!("Cannot create license storage directory: {e}"))?;
-    }
+fn license_keyring_entry() -> Result<keyring::Entry, String> {
+    keyring::Entry::new(LICENSE_KEYRING_SERVICE, LICENSE_KEYRING_ACCOUNT)
+        .map_err(|error| format!("Cannot access OS keyring for license storage: {error}"))
+}
 
-    let tmp = path.with_extension("key.tmp");
-    let mut file = fs::File::create(&tmp).map_err(|e| format!("Cannot write license: {e}"))?;
-    file.write_all(key.as_bytes())
-        .map_err(|e| format!("Cannot write license: {e}"))?;
-    fs::rename(&tmp, &path).map_err(|e| format!("Cannot finalize license: {e}"))?;
+/// Save the license key to the OS keyring for future launches.
+pub fn save_license(key: &str) -> Result<(), String> {
+    license_keyring_entry()?
+        .set_password(key.trim())
+        .map_err(|error| format!("Cannot save license in OS keyring: {error}"))?;
+
+    let legacy_path = legacy_license_storage_path();
+    if legacy_path.exists() {
+        let _ = fs::remove_file(legacy_path);
+    }
 
     Ok(())
 }
 
-/// Load the license key from disk if it exists.
+/// Load the license key from the OS keyring if it exists.
 pub fn load_license() -> Option<String> {
-    let path = license_storage_path();
-    fs::read_to_string(path).ok().map(|s| s.trim().to_string())
+    match license_keyring_entry() {
+        Ok(entry) => match entry.get_password() {
+            Ok(key) => return Some(key.trim().to_string()),
+            Err(keyring::Error::NoEntry) => {}
+            Err(error) => {
+                tracing::warn!("load_license: Cannot load license from OS keyring: {error}");
+                return None;
+            }
+        },
+        Err(error) => {
+            tracing::warn!("load_license: {error}");
+            return None;
+        }
+    }
+
+    let legacy_path = legacy_license_storage_path();
+    let legacy_key = fs::read_to_string(&legacy_path)
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())?;
+
+    match save_license(&legacy_key) {
+        Ok(()) => {
+            let _ = fs::remove_file(legacy_path);
+            Some(legacy_key)
+        }
+        Err(error) => {
+            tracing::warn!(
+                "load_license: refusing to use legacy plaintext license because migration to keyring failed: {error}"
+            );
+            None
+        }
+    }
 }
 
-/// Remove the saved license key from disk.
+/// Remove the saved license key from the OS keyring and delete any legacy plaintext copy.
 pub fn delete_license() -> Result<(), String> {
-    let path = license_storage_path();
-    if path.exists() {
-        fs::remove_file(&path).map_err(|e| format!("Cannot delete license: {e}"))?;
+    match license_keyring_entry()?.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => {}
+        Err(error) => return Err(format!("Cannot delete license from OS keyring: {error}")),
+    }
+
+    let legacy_path = legacy_license_storage_path();
+    if legacy_path.exists() {
+        fs::remove_file(&legacy_path).map_err(|e| format!("Cannot delete legacy license: {e}"))?;
     }
     Ok(())
 }
@@ -428,6 +559,12 @@ pub fn get_license_status() -> LicenseInfo {
 mod tests {
     use super::*;
     use ed25519_dalek::{Signer, SigningKey};
+
+    const TEST_DEV_PLACEHOLDER_SIGNING_SEED: [u8; 32] = [
+        0x52, 0xc4, 0xe1, 0xf7, 0x0a, 0x9b, 0x33, 0x6d, 0x12, 0x88, 0x5c, 0x44, 0x29, 0x1e, 0x6b,
+        0xa0, 0xfd, 0x77, 0x3a, 0x91, 0xc6, 0x05, 0xee, 0x18, 0xb4, 0x2f, 0x8d, 0x0c, 0x97, 0x63,
+        0x21, 0xae,
+    ];
 
     /// Build a signed license key the same way the JavaScript license server does.
     fn build_test_license(
@@ -496,7 +633,9 @@ mod tests {
 
     #[test]
     fn save_and_load_roundtrip() {
-        // Skip if HOME is not writable in CI
+        if std::env::var("RECUPERE_RUN_KEYRING_TESTS").is_err() {
+            return;
+        }
         let test_key = "RECUP-test.key";
         if save_license(test_key).is_ok() {
             let loaded = load_license();
@@ -619,18 +758,13 @@ mod tests {
     }
 
     #[test]
-    fn dev_placeholder_public_key_matches_dev_seed() {
-        // Contract: `bin/gen_license.rs` signs dev licenses with
-        // `DEV_PLACEHOLDER_SIGNING_SEED` and they must verify against the
-        // `DEV_PLACEHOLDER_PUBLIC_KEY` baked into this module. If either
-        // constant drifts without the other, every locally minted dev key
-        // silently stops working. Derive the pubkey from the seed and compare.
-        let signing_key = SigningKey::from_bytes(&DEV_PLACEHOLDER_SIGNING_SEED);
+    fn dev_placeholder_public_key_matches_test_seed() {
+        let signing_key = SigningKey::from_bytes(&TEST_DEV_PLACEHOLDER_SIGNING_SEED);
         let derived = signing_key.verifying_key().to_bytes();
         assert_eq!(
             derived, DEV_PLACEHOLDER_PUBLIC_KEY,
             "DEV_PLACEHOLDER_PUBLIC_KEY has drifted from the Ed25519 public key \
-             derived from DEV_PLACEHOLDER_SIGNING_SEED. Regenerate one side."
+             used by local dev-license tests. Regenerate the placeholder pair."
         );
     }
 
@@ -639,7 +773,7 @@ mod tests {
         // End-to-end: a license produced exactly like `gen_license` does must
         // validate against `DEV_PLACEHOLDER_PUBLIC_KEY`. This locks in the
         // full signing → verification chain for the dev tier.
-        let signing_key = SigningKey::from_bytes(&DEV_PLACEHOLDER_SIGNING_SEED);
+        let signing_key = SigningKey::from_bytes(&TEST_DEV_PLACEHOLDER_SIGNING_SEED);
         let machine = "c".repeat(64);
         let license = build_test_license(&signing_key, "dev@recupere.local", &machine, "pro", None);
 

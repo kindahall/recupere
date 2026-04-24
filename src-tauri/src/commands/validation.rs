@@ -39,6 +39,32 @@ pub(crate) fn normalize_conflict_strategy(conflict_strategy: &str) -> Result<&'s
     }
 }
 
+pub(crate) const MAX_HEX_PREVIEW_BYTES: u64 = 64 * 1024 * 1024;
+pub(crate) const MAX_AI_USER_MESSAGE_BYTES: usize = 32 * 1024;
+
+pub(crate) fn validate_hex_preview_request(bytes_to_read: u64) -> Result<(), String> {
+    if bytes_to_read == 0 {
+        return Err("Hex preview byte count must be greater than zero.".into());
+    }
+    if bytes_to_read > MAX_HEX_PREVIEW_BYTES {
+        return Err(format!(
+            "Hex preview byte count is too large. Maximum is {} bytes.",
+            MAX_HEX_PREVIEW_BYTES
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_ai_user_message(message: &str) -> Result<(), String> {
+    if message.len() > MAX_AI_USER_MESSAGE_BYTES {
+        return Err(format!(
+            "AI message is too large. Maximum is {} bytes.",
+            MAX_AI_USER_MESSAGE_BYTES
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -80,5 +106,18 @@ mod tests {
     fn normalize_conflict_strategy_rejects_unknown_values() {
         assert_eq!(normalize_conflict_strategy("rename").unwrap(), "rename");
         assert!(normalize_conflict_strategy("keep-both").is_err());
+    }
+
+    #[test]
+    fn validate_hex_preview_request_rejects_zero_and_huge_values() {
+        assert!(validate_hex_preview_request(1).is_ok());
+        assert!(validate_hex_preview_request(0).is_err());
+        assert!(validate_hex_preview_request(MAX_HEX_PREVIEW_BYTES + 1).is_err());
+    }
+
+    #[test]
+    fn validate_ai_user_message_rejects_oversized_input() {
+        assert!(validate_ai_user_message("hello").is_ok());
+        assert!(validate_ai_user_message(&"x".repeat(MAX_AI_USER_MESSAGE_BYTES + 1)).is_err());
     }
 }

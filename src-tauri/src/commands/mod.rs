@@ -37,7 +37,10 @@ pub use license::*;
 pub use repair_cmd::*;
 pub use runtime::*;
 pub use scan::*;
-pub(crate) use validation::{normalize_conflict_strategy, normalize_scan_type};
+pub(crate) use validation::{
+    normalize_conflict_strategy, normalize_scan_type, validate_ai_user_message,
+    validate_hex_preview_request,
+};
 
 // Helpers moved to `commands/export.rs` (Sprint 2.1 slice `export_helpers`,
 // 2026-04-17). Re-exposed at `super::` so `repair_cmd.rs`, `file_preview.rs`
@@ -47,9 +50,9 @@ pub(crate) use validation::{normalize_conflict_strategy, normalize_scan_type};
 // `unique_target_path` are private helpers of `export.rs` and are not
 // re-exported.
 pub(super) use export::{
-    asset_preview_kind, build_hex_preview_lines, build_source_path, file_uses_recovery_image,
+    asset_preview_kind, build_hex_preview_lines, file_uses_recovery_image,
     infer_auxiliary_asset_preview, is_document_previewable_extension,
-    is_text_previewable_extension,
+    is_text_previewable_extension, resolve_source_path_under_root,
 };
 
 pub(super) use scan::{
@@ -64,7 +67,7 @@ pub(super) use scan::{
 // does not warn about them being unused in non-test builds.
 #[cfg(test)]
 use export::{
-    relative_dir_from_display_path, resolve_target_path, safe_export_file_name,
+    build_source_path, relative_dir_from_display_path, resolve_target_path, safe_export_file_name,
     verify_exported_file,
 };
 #[cfg(test)]

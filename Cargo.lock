@@ -3952,6 +3952,7 @@ dependencies = [
  "plist",
  "proptest",
  "quick-xml 0.39.2",
+ "rand 0.8.5",
  "rayon",
  "reqwest 0.12.28",
  "serde",
@@ -3964,6 +3965,7 @@ dependencies = [
  "tauri-plugin-opener",
  "tracing",
  "tracing-subscriber",
+ "url",
  "zip",
 ]
 
@@ -3973,6 +3975,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "clap",
+ "dirs 5.0.1",
  "hex",
  "rand 0.8.5",
  "recupere",

@@ -1476,6 +1476,7 @@ export function ResultsPage() {
             loading={previewLoading}
             error={previewError}
             assetUrl={previewAssetUrl}
+            sourceDevicePath={selectedDevice?.devicePath}
           />
         </SectionCard>
       </div>

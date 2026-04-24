@@ -77,6 +77,50 @@ Tout point encore incertain.
 
 # Plans actifs
 
+## Chantier 89 — Corrections audit securite 2026-04-24
+**Objectif** : fermer les vulnerabilites P0/P1 applicables localement dans `AUDIT_SECURITE_2026_04_24.md` sans modifier le moteur de lecture source, et rendre les decisions importantes tracables par tests, preflight et logs.
+
+**Hypotheses** :
+- le depot courant est la branche principale a pousser vers `https://github.com/kindahall/recupere.git` apres validation ;
+- les corrections doivent privilegier les garde-fous locaux immediats plutot qu'une refonte de 6-10 semaines ;
+- les points qui demandent une infrastructure externe (revocation list, signature Apple/Windows reelle, updater GA, MDM, dashboard privacy complet) restent documentes comme limites de release.
+
+**Risques** :
+- le stockage licence via keyring peut rendre une ancienne licence plaintext indisponible si le keyring OS est absent ou verrouille ;
+- le durcissement remote peut refuser des agents LAN auparavant acceptes, volontairement au profit de TLS/SSH tunnel ;
+- les exports deviennent plus stricts sur les chemins, symlinks et noms reserves Windows.
+
+**Modules impactes** :
+- licence : `src-tauri/src/license`, `src-tauri/build.rs`, `src-tauri/src/bin/gen_license.rs` ;
+- preview/export/repair : `src-tauri/src/commands/export.rs`, `file_preview.rs`, `repair_cmd.rs`, `state.rs` ;
+- remote : `src-tauri/src/remote`, `crates/recupere-agent/src/http.rs` ;
+- IA locale : `src-tauri/src/commands/ai.rs`, `src-tauri/src/cloud_ai/mod.rs` ;
+- packaging : `src-tauri/capabilities/default.json`, `src-tauri/entitlements.plist`, `scripts/release-preflight.mjs` ;
+- validation/tests : tests Rust cibles, `npm run release:preflight`, checks Cargo.
+
+**Plan d'execution** :
+1. Durcir la licence : fingerprint avec identifiants systeme stables, keyring, suppression plaintext, build guard tous profils non-debug, seed dev hors binaire public -> verification : tests licence/build script.
+2. Fermer les ecritures dangereuses : export atomique via fichiers temporaires, validation repair/export, noms reserves Windows, CSV formula injection, rapports hors `/tmp` predictible -> verification : tests commandes export.
+3. Durcir remote : URL via `url`, pas de redirects, cap JSON, telechargement sans append implicite, hash SHA-256 des pulls -> verification : tests URL/client/agent.
+4. Encadrer IPC/preview/IA : bornes d'entree, source canonicalisee sous root, prompts avec contenu utilisateur delimite et echappe -> verification : tests prompts et preview/export.
+5. Ajuster packaging : opener scope, entitlements hardened runtime, preflight signatures/licence -> verification : `npm run release:preflight`.
+
+**Criteres de validation** :
+- aucun changement n'autorise une ecriture sur disque source ;
+- les exports et repairs refusent les destinations non validees ou hors racine canonique ;
+- la licence n'est plus sauvegardee en clair par defaut ;
+- un agent distant ne peut plus provoquer redirect-token leak, OOM JSON simple, ou pull sans verification de taille/hash ;
+- les tests cibles passent, ou les limites restantes sont explicites.
+
+**Limites connues** :
+- pas de TPM/Secure Enclave direct ni revocation online dans cette tranche ;
+- pas de dashboard privacy complet ni flow premier lancement React entier ;
+- pas de signature Apple/Windows locale sans secrets de release.
+
+**Statut 2026-04-24** : tranche securite livree. Les corrections locales P0/P1 applicables ont ete implementees : licence keyring + migration plaintext, fingerprint OS, seed dev hors API publique, garde build non-debug, export/repair atomiques, URL remote stricte, cap JSON, verification SHA-256 des pulls, bornes IPC, prompt escaping, opener scope, entitlements reduits, purge PII avec confirmation et marqueur d'audit.
+
+**Validation 2026-04-24** : `npm run build` OK ; `npm run test:ui` 67 tests OK ; `npm run lint` OK ; `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -W warnings` OK ; `cargo test --manifest-path src-tauri/Cargo.toml` 360 passed / 3 ignored ; `cargo test --manifest-path crates/recupere-agent/Cargo.toml` OK ; `npm run rust:fmt` OK ; `npm run release:preflight` PASS avec 4 warnings attendus (cle licence release absente, updater/signing release non configures localement).
+
 ## Chantier 88 — Professional Recovery UX + Benchmark Parity
 **Objectif** : rapprocher l'expérience de résultats, d'export, de preview/repair et de preuve benchmark d'un produit commercial sérieux, sans promettre une récupération certaine ni masquer les limites moteur.
 

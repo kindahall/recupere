@@ -5,7 +5,21 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "opener:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        { "url": "https://ollama.com/download*" }
+      ]
+    },
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [
+        { "path": "$APPDATA/recupere/reports/**" },
+        { "path": "$TEMP/recupere/reports/**" },
+        { "path": "$TEMP/recupere-remote-cache/**" },
+        { "path": "$TEMP/recupere-workspace/previews/**" }
+      ]
+    },
     "dialog:default"
   ]
 }

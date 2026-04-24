@@ -6,8 +6,10 @@
 
 use reqwest::blocking::Client;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
+use reqwest::redirect::Policy;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::io::Read;
 use std::time::Duration;
 
@@ -19,6 +21,7 @@ use crate::types::{
 };
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+const MAX_JSON_RESPONSE_BYTES: u64 = 32 * 1024 * 1024;
 
 fn build_client(agent: &RemoteAgent) -> Result<Client, String> {
     let mut headers = HeaderMap::new();
@@ -29,6 +32,8 @@ fn build_client(agent: &RemoteAgent) -> Result<Client, String> {
     Client::builder()
         .default_headers(headers)
         .timeout(REQUEST_TIMEOUT)
+        .redirect(Policy::none())
+        .https_only(agent.base_url.trim_start().starts_with("https://"))
         .build()
         .map_err(|error| format!("unable to build remote client: {error}"))
 }
@@ -71,9 +76,7 @@ fn post_empty<T: DeserializeOwned>(agent: &RemoteAgent, path: &str) -> Result<T,
 
 fn parse_response<T: DeserializeOwned>(response: reqwest::blocking::Response) -> Result<T, String> {
     let status = response.status();
-    let body = response
-        .text()
-        .map_err(|error| format!("unable to read remote agent response: {error}"))?;
+    let body = read_limited_response_body(response, MAX_JSON_RESPONSE_BYTES)?;
     if !status.is_success() {
         // The agent returns `{"error": "..."}` on failure — surface that
         // string directly so the desktop app can show it as-is.
@@ -86,6 +89,31 @@ fn parse_response<T: DeserializeOwned>(response: reqwest::blocking::Response) ->
     }
     serde_json::from_str(&body)
         .map_err(|error| format!("unable to decode remote agent response: {error}: {body}"))
+}
+
+fn read_limited_response_body(
+    mut response: reqwest::blocking::Response,
+    max_bytes: u64,
+) -> Result<String, String> {
+    if let Some(length) = response.content_length() {
+        if length > max_bytes {
+            return Err(format!(
+                "remote agent response is too large: {length} bytes (max {max_bytes})"
+            ));
+        }
+    }
+
+    let mut limited = response.by_ref().take(max_bytes + 1);
+    let mut bytes = Vec::new();
+    limited
+        .read_to_end(&mut bytes)
+        .map_err(|error| format!("unable to read remote agent response: {error}"))?;
+    if bytes.len() as u64 > max_bytes {
+        return Err(format!(
+            "remote agent response exceeded the maximum size of {max_bytes} bytes"
+        ));
+    }
+    String::from_utf8(bytes).map_err(|error| format!("remote agent response is not UTF-8: {error}"))
 }
 
 // ---------- Public API ----------
@@ -291,9 +319,8 @@ pub fn export_results_csv(agent: &RemoteAgent, scan_id: &str) -> Result<String, 
 //
 // Pulls bytes from `GET /v1/files?path=<absolute>` and writes them to
 // `local_path`. The agent accepts only paths for artifacts it generated under
-// controlled workspaces. Supports resumable downloads through the HTTP
-// `Range` header — if the local file already exists, we send
-// `Range: bytes=<existing>-` and append.
+// controlled workspaces. Existing local files are truncated instead of resumed
+// so hostile pre-created bytes cannot be silently mixed into restored output.
 
 pub fn download_file<F>(
     agent: &RemoteAgent,
@@ -310,14 +337,8 @@ where
     let client = build_client(agent)?;
     let url = endpoint(agent, &format!("/v1/files?path={}", urlencode(remote_path)));
 
-    let resume_offset = std::fs::metadata(local_path)
-        .map(|meta| meta.len())
-        .unwrap_or(0);
-
-    let mut request = client.get(&url);
-    if resume_offset > 0 {
-        request = request.header(reqwest::header::RANGE, format!("bytes={resume_offset}-"));
-    }
+    let request = client.get(&url);
+    let resume_offset = 0_u64;
 
     let mut response = request
         .send()
@@ -325,7 +346,7 @@ where
 
     let status = response.status();
     if !status.is_success() {
-        let body = response.text().unwrap_or_default();
+        let body = read_limited_response_body(response, 64 * 1024).unwrap_or_default();
         return Err(format!("remote agent error ({status}): {body}"));
     }
 
@@ -343,9 +364,9 @@ where
 
     let mut file = OpenOptions::new()
         .create(true)
-        .append(resume_offset > 0)
+        .append(false)
         .write(true)
-        .truncate(resume_offset == 0)
+        .truncate(true)
         .open(local_path)
         .map_err(|error| format!("unable to open local download path: {error}"))?;
 
@@ -374,6 +395,7 @@ pub struct PullResponse {
     pub path: String,
     pub name: String,
     pub size_bytes: u64,
+    pub sha256: String,
 }
 
 pub fn pull_recovered_file(
@@ -398,6 +420,43 @@ pub fn delete_remote_file(agent: &RemoteAgent, remote_path: &str) -> Result<(), 
         ));
     }
     Ok(())
+}
+
+pub fn verify_downloaded_file(
+    local_path: &std::path::Path,
+    expected_size: u64,
+    expected_sha256: &str,
+) -> Result<(), String> {
+    let metadata = std::fs::metadata(local_path)
+        .map_err(|error| format!("unable to read downloaded file metadata: {error}"))?;
+    if metadata.len() != expected_size {
+        return Err(format!(
+            "downloaded file size mismatch: expected {expected_size} bytes, got {} bytes",
+            metadata.len()
+        ));
+    }
+    let actual_sha256 = sha256_file(local_path)?;
+    if actual_sha256 != expected_sha256 {
+        return Err("downloaded file SHA-256 mismatch".into());
+    }
+    Ok(())
+}
+
+fn sha256_file(path: &std::path::Path) -> Result<String, String> {
+    let mut file = std::fs::File::open(path)
+        .map_err(|error| format!("unable to open downloaded file for hashing: {error}"))?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let read = file
+            .read(&mut buffer)
+            .map_err(|error| format!("unable to read downloaded file for hashing: {error}"))?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
 }
 
 fn urlencode(input: &str) -> String {

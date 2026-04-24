@@ -681,6 +681,8 @@ fn safe_export_file_name_removes_path_control() {
     assert_eq!(safe_export_file_name("../../id_rsa"), "id_rsa");
     assert_eq!(safe_export_file_name("/etc/passwd"), "passwd");
     assert_eq!(safe_export_file_name("bad:name?.txt"), "bad_name_.txt");
+    assert_eq!(safe_export_file_name("CON.txt"), "CON_.txt");
+    assert_eq!(safe_export_file_name("LPT1"), "LPT1_");
     assert_eq!(safe_export_file_name(".."), "recovered-file");
 }
 
@@ -714,7 +716,7 @@ fn resolve_target_path_supports_rename_skip_and_overwrite() {
         .expect("overwrite strategy should succeed")
         .expect("overwrite strategy should return the original target");
     assert_eq!(overwrite_target, target);
-    assert!(!overwrite_target.exists());
+    assert!(overwrite_target.exists());
 
     let _ = fs::remove_dir_all(temp_dir);
 }

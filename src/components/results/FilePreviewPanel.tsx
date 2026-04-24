@@ -13,6 +13,7 @@ interface FilePreviewPanelProps {
   loading: boolean;
   error: string | null;
   assetUrl?: string;
+  sourceDevicePath?: string;
 }
 
 const OFFICE_EXTENSIONS = new Set(['docx', 'xlsx', 'pptx']);
@@ -24,6 +25,7 @@ export function FilePreviewPanel({
   loading,
   error,
   assetUrl,
+  sourceDevicePath,
 }: FilePreviewPanelProps) {
   const { t } = useTranslation();
   const isExpert = useAppStore((state) => state.userMode === 'expert');
@@ -73,6 +75,7 @@ export function FilePreviewPanel({
           fileId={file.id}
           fileName={file.name}
           extension={file.extension}
+          sourceDevicePath={sourceDevicePath}
         />
       )}
 

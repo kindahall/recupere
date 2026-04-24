@@ -1147,13 +1147,27 @@ pub(crate) fn write_binary_file_to_path(
     }
 
     let temp_path = path.with_extension("tmp");
-    fs::write(&temp_path, bytes).map_err(|error| {
-        format!(
-            "Unable to write temporary {label} {}: {}",
-            temp_path.to_string_lossy(),
-            error,
-        )
-    })?;
+    {
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create(true).truncate(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = options.open(&temp_path).map_err(|error| {
+            format!(
+                "Unable to write temporary {label} {}: {}",
+                temp_path.to_string_lossy(),
+                error,
+            )
+        })?;
+        use std::io::Write as _;
+        file.write_all(bytes)
+            .map_err(|error| format!("Unable to write temporary {label}: {error}"))?;
+        file.flush()
+            .map_err(|error| format!("Unable to flush temporary {label}: {error}"))?;
+    }
 
     if path.exists() {
         fs::remove_file(path).map_err(|error| {

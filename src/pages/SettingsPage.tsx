@@ -4,6 +4,7 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
+import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { SectionCard } from '../components/common/SectionCard';
 import { WarningBanner } from '../components/common/WarningBanner';
 import { PageHeader } from '../components/layout/PageHeader';
@@ -27,6 +28,7 @@ import {
   getLicenseStatus,
   getMachineFingerprint,
   probeGemmaRegistry,
+  purgeAllPii,
   saveFilesystemMemoryPolicy,
   saveGemmaSettings,
   saveSupportBundle,
@@ -98,6 +100,9 @@ export function SettingsPage() {
     message: string;
   } | null>(null);
   const [licenseLoading, setLicenseLoading] = useState(false);
+  const [licensePrivacyConsent, setLicensePrivacyConsent] = useState(false);
+  const [confirmPiiPurgeOpen, setConfirmPiiPurgeOpen] = useState(false);
+  const [piiPurging, setPiiPurging] = useState(false);
   const [machineFingerprint, setMachineFingerprint] = useState<string | null>(null);
   const [auditReport, setAuditReport] = useState<AuditChainReport | null>(null);
   const [auditChecking, setAuditChecking] = useState(false);
@@ -419,6 +424,13 @@ export function SettingsPage() {
     if (trimmed.length === 0) {
       return;
     }
+    if (!licensePrivacyConsent) {
+      setLicenseNotice({
+        variant: 'warning',
+        message: t('settings.license_privacy_required'),
+      });
+      return;
+    }
     setLicenseNotice(null);
     setLicenseLoading(true);
     try {
@@ -466,6 +478,39 @@ export function SettingsPage() {
       });
     } finally {
       setLicenseLoading(false);
+    }
+  };
+
+  const handlePurgeAllPii = async () => {
+    setConfirmPiiPurgeOpen(false);
+    setLicenseNotice(null);
+    setPiiPurging(true);
+    try {
+      const result = await purgeAllPii();
+      const complete =
+        result.license_deleted &&
+        result.history_purged &&
+        result.audit_cleared &&
+        result.recent_traces_cleared;
+
+      setLicenseKeyInput('');
+      setLicensePrivacyConsent(false);
+      setLicenseStatus('free');
+      await refreshLicenseState();
+      await refreshDiagnostics();
+      setLicenseNotice({
+        variant: complete ? 'success' : 'warning',
+        message: complete
+          ? t('settings.license_purge_success')
+          : t('settings.license_purge_partial'),
+      });
+    } catch (error) {
+      setLicenseNotice({
+        variant: 'warning',
+        message: error instanceof Error ? error.message : t('settings.license_purge_failed'),
+      });
+    } finally {
+      setPiiPurging(false);
     }
   };
 
@@ -1115,6 +1160,8 @@ export function SettingsPage() {
                   {licenseInfo?.message ? ` ${licenseInfo.message}` : ''}
                 </WarningBanner>
 
+                <WarningBanner variant="info">{t('settings.license_privacy_notice')}</WarningBanner>
+
                 <div className="grid grid-2 gap-3">
                   <div className="stat-card">
                     <span className="stat-card-label">{t('settings.license_tier')}</span>
@@ -1175,13 +1222,26 @@ export function SettingsPage() {
                       type="button"
                       className="btn btn-secondary btn-sm"
                       onClick={handleActivateLicense}
-                      disabled={licenseLoading || licenseKeyInput.trim().length === 0}
+                      disabled={
+                        licenseLoading ||
+                        licenseKeyInput.trim().length === 0 ||
+                        !licensePrivacyConsent
+                      }
                     >
                       {licenseLoading
                         ? t('settings.license_working')
                         : t('settings.license_activate')}
                     </button>
                   </div>
+                  <label className="flex items-start gap-2 text-xs text-secondary">
+                    <input
+                      type="checkbox"
+                      checked={licensePrivacyConsent}
+                      onChange={(event) => setLicensePrivacyConsent(event.target.checked)}
+                      disabled={licenseLoading}
+                    />
+                    <span>{t('settings.license_privacy_consent')}</span>
+                  </label>
                 </div>
 
                 <div className="flex gap-2">
@@ -1189,7 +1249,7 @@ export function SettingsPage() {
                     type="button"
                     className="btn btn-secondary btn-sm"
                     onClick={() => void refreshLicenseState()}
-                    disabled={licenseLoading}
+                    disabled={licenseLoading || piiPurging}
                   >
                     {t('settings.license_refresh')}
                   </button>
@@ -1197,10 +1257,27 @@ export function SettingsPage() {
                     type="button"
                     className="btn btn-secondary btn-sm"
                     onClick={handleDeactivateLicense}
-                    disabled={licenseLoading || !licenseInfo?.valid}
+                    disabled={licenseLoading || piiPurging || !licenseInfo?.valid}
                   >
                     {t('settings.license_deactivate')}
                   </button>
+                  <button
+                    type="button"
+                    className="btn btn-danger btn-sm"
+                    onClick={() => setConfirmPiiPurgeOpen(true)}
+                    disabled={licenseLoading || piiPurging}
+                  >
+                    {piiPurging ? t('settings.license_purging') : t('settings.license_purge_all')}
+                  </button>
+                  <ConfirmDialog
+                    open={confirmPiiPurgeOpen}
+                    title={t('settings.license_purge_confirm_title')}
+                    description={t('settings.license_purge_confirm')}
+                    variant="danger"
+                    confirmLabel={t('settings.license_purge_all')}
+                    onConfirm={handlePurgeAllPii}
+                    onCancel={() => setConfirmPiiPurgeOpen(false)}
+                  />
                 </div>
 
                 {licenseNotice && (
