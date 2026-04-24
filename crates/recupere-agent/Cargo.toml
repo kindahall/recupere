@@ -1,0 +1,25 @@
+[package]
+name = "recupere-agent"
+version = "0.1.0"
+edition = "2021"
+description = "Headless Récupère agent: runs on a remote server and exposes the recovery engine over HTTP for remote piloting from the desktop app."
+
+[[bin]]
+name = "recupere-agent"
+path = "src/main.rs"
+
+[dependencies]
+recupere_lib = { package = "recupere", path = "../../src-tauri", default-features = false }
+axum = "0.7"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "fs", "io-util"] }
+tokio-util = { version = "0.7", features = ["io"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+clap = { version = "4", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+sha2 = "0.10"
+rand = "0.8"
+hex = "0.4"

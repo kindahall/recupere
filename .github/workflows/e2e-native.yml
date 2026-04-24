@@ -1,0 +1,248 @@
+name: E2E native (cross-platform)
+
+# ============================================================================
+# Native E2E suite — Chantier 83
+# ============================================================================
+# Three sibling jobs, one per supported OS, running the same `e2e/native/*`
+# specs through a different stack:
+#   - Linux + Windows: tauri-driver 2.0.5 (cargo install global)
+#   - macOS:           Appium Mac2 driver (Apple blocks external WebDriver
+#                      from attaching to WKWebView, hence the different stack)
+#
+# This workflow is intentionally separate from `ci.yml`. Native E2E is
+# inherently slower and (during bring-up) more flake-prone than unit tests
+# and Playwright browser-preview specs. Putting it in its own workflow:
+#   1. keeps the main CI fast and signal-rich on every PR;
+#   2. surfaces native-suite health on a deterministic schedule (daily);
+#   3. lets us flip the trigger to `pull_request:` and make it blocking
+#      once two consecutive scheduled runs are green per platform —
+#      tracked in PLANS.md → Chantier 83.
+#
+# No `continue-on-error` anywhere. If a job fails, the workflow is red.
+# That is the whole point of separating it: honest signal, no placebo.
+# ============================================================================
+# Promotion checklist — read this before adding `pull_request:` to triggers
+# ============================================================================
+# This workflow does NOT block pull requests today. To make it blocking on
+# PRs, ALL of the following must be true. If any item is unchecked, do not
+# promote. Adding `pull_request:` prematurely will block every PR the day a
+# transient native flake hits, even on PRs unrelated to the native suite.
+#
+#   [ ] 1. Two consecutive scheduled runs are green on `e2e-native-linux`.
+#   [ ] 2. Two consecutive scheduled runs are green on `e2e-native-windows`.
+#   [ ] 3. Two consecutive scheduled runs are green on `e2e-native-macos`.
+#   [ ] 4. The TCC.db pre-grant step on macOS has been observed working at
+#         least once (no manual prompt blocked the run).
+#   [ ] 5. None of the three jobs has timed out in the trailing 7 days.
+#   [ ] 6. PLANS.md → Chantier 83 has been updated to "blocking on PRs".
+#
+# When all six are checked, open a one-line PR adding `pull_request:` to
+# the `on:` block below. The PR description should link to the GitHub
+# Actions run page that proves item 1-3.
+# ============================================================================
+
+on:
+  schedule:
+    # Daily at 03:00 UTC — well outside business hours for the team. Cron
+    # runs from `main` only, per GitHub Actions semantics.
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  e2e-native-linux:
+    name: Native E2E (Linux / tauri-driver)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Install Linux system dependencies (incl. webkit2gtk-driver for tauri-driver)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            patchelf \
+            webkit2gtk-driver \
+            xvfb
+
+      - name: Install frontend and backend dependencies
+        run: npm ci
+
+      - name: Install tauri-driver
+        run: cargo install tauri-driver --version 2.0.5 --locked
+
+      - name: Build Récupère debug binary
+        run: cargo build --manifest-path src-tauri/Cargo.toml
+
+      - name: Run native E2E suite under xvfb
+        run: xvfb-run --auto-servernum npm run test:e2e:native:linux
+
+      - name: Upload WebdriverIO logs on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-e2e-linux-logs
+          path: |
+            wdio.log
+            logs/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  e2e-native-windows:
+    name: Native E2E (Windows / tauri-driver)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      # WebView2 runtime is preinstalled on windows-latest. msedgedriver is
+      # bundled with tauri-driver itself.
+      - name: Install frontend and backend dependencies
+        run: npm ci
+
+      - name: Install tauri-driver
+        run: cargo install tauri-driver --version 2.0.5 --locked
+
+      - name: Build Récupère debug binary
+        run: cargo build --manifest-path src-tauri/Cargo.toml
+
+      - name: Run native E2E suite
+        run: npm run test:e2e:native:windows
+
+      - name: Upload WebdriverIO logs on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-e2e-windows-logs
+          path: |
+            wdio.log
+            logs/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  e2e-native-macos:
+    name: Native E2E (macOS / Appium Mac2 + WKWebView)
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      # macos-latest ships with full Xcode + XCTest preinstalled, which Mac2
+      # driver requires. No extra Xcode setup needed here.
+      - name: Install frontend and backend dependencies
+        run: npm ci
+
+      - name: Install external Appium Mac2 stack
+        run: |
+          npm install -g appium@3
+          appium driver install mac2
+
+      # ------------------------------------------------------------------
+      # Pre-grant Accessibility permission to the node binary that drives
+      # Appium. macOS gates Mac2 driver behind the TCC (Transparency,
+      # Consent and Control) framework; without an explicit grant, the
+      # very first session attempt blocks on a GUI prompt that nobody can
+      # click on a headless CI runner.
+      #
+      # The deterministic workaround is to write directly into the user
+      # TCC.db SQLite store. This is brittle in spirit (TCC schema may
+      # evolve across macOS releases) but the only known unattended path
+      # short of MDM Configuration Profiles. Apple's published schema
+      # for `kTCCServiceAccessibility` is documented at
+      # https://www.rainforestqa.com/blog/macos-tcc-db-deep-dive .
+      #
+      # Schema slots (macOS 13+):
+      #   service        TEXT       'kTCCServiceAccessibility'
+      #   client         TEXT       absolute path to the executable
+      #   client_type    INTEGER    1 = path-based identifier
+      #   auth_value     INTEGER    2 = allowed
+      #   auth_reason    INTEGER    4 = user set
+      #   auth_version   INTEGER    1
+      #   csreq          BLOB       NULL (path-based)
+      #   policy_id      INTEGER    NULL
+      #   indirect_obj_*            NULL  (3 columns)
+      #   flags          INTEGER    0
+      #   last_modified  INTEGER    epoch seconds
+      # ------------------------------------------------------------------
+      - name: Pre-grant Accessibility to node via TCC.db (deterministic)
+        run: |
+          set -euo pipefail
+          NODE_BIN="$(which node)"
+          TCC_DB="$HOME/Library/Application Support/com.apple.TCC/TCC.db"
+          mkdir -p "$(dirname "$TCC_DB")"
+          if [ ! -f "$TCC_DB" ]; then
+            sqlite3 "$TCC_DB" "CREATE TABLE access (service TEXT, client TEXT, client_type INTEGER, auth_value INTEGER, auth_reason INTEGER, auth_version INTEGER, csreq BLOB, policy_id INTEGER, indirect_object_identifier_type INTEGER, indirect_object_identifier TEXT, indirect_object_code_identity BLOB, flags INTEGER, last_modified INTEGER, PRIMARY KEY (service, client, client_type, indirect_object_identifier));"
+          fi
+          NOW="$(date +%s)"
+          sqlite3 "$TCC_DB" "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, csreq, policy_id, indirect_object_identifier_type, indirect_object_identifier, indirect_object_code_identity, flags, last_modified) VALUES ('kTCCServiceAccessibility', '$NODE_BIN', 1, 2, 4, 1, NULL, NULL, 0, 'UNUSED', NULL, 0, $NOW);"
+          echo "TCC entry inserted for $NODE_BIN"
+
+      - name: Build Récupère debug binary
+        run: cargo build --manifest-path src-tauri/Cargo.toml
+
+      - name: Start external Appium server
+        run: |
+          mkdir -p logs
+          appium --address 127.0.0.1 --port 4723 > logs/appium-macos.log 2>&1 &
+          for attempt in {1..30}; do
+            if curl --silent --fail http://127.0.0.1:4723/status >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat logs/appium-macos.log
+          exit 1
+
+      - name: Run native E2E suite
+        run: npm run test:e2e:native:macos
+
+      - name: Upload WebdriverIO + Appium logs on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-e2e-macos-logs
+          path: |
+            wdio.log
+            logs/
+            ~/Library/Logs/appium/
+          if-no-files-found: ignore
+          retention-days: 14

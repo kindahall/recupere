@@ -1,0 +1,329 @@
+{
+  "schemaVersion": 1,
+  "corpusId": "recupere-benchmark-corpus-v1",
+  "title": "Récupère benchmark corpus v1",
+  "status": "bootstrap",
+  "statusDate": "2026-04-11",
+  "description": "Initial benchmark corpus for TT-01. This version mixes ready in-repo synthetic fixtures with planned public-artifact scenarios that still need fixture packaging.",
+  "policies": {
+    "requiresReadOnlySource": true,
+    "manualCompetitorRuns": true,
+    "notes": [
+      "Scenario ids must stay stable once competitor result files exist.",
+      "Unsupported cases must remain visible in published summaries.",
+      "Public claims require result evidence, not just fixture presence."
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "ntfs_deleted_basic_v1",
+      "title": "NTFS deleted file with intact metadata",
+      "priority": "P0",
+      "readiness": "ready-in-repo",
+      "filesystem": "ntfs",
+      "class": "deleted-file",
+      "difficulty": "simple",
+      "platforms": [
+        "macos",
+        "linux",
+        "windows"
+      ],
+      "source": {
+        "kind": "rust-test-generator",
+        "location": "src-tauri/src/analyzers/ntfs.rs",
+        "generator": "synthetic_deleted_ntfs_image",
+        "notes": "Used by analyzer and command tests; promote to standalone fixture generator in a later TT-01 slice."
+      },
+      "groundTruth": {
+        "expectedRecoverableItemsMin": 1,
+        "expectedIntactExportsMin": 1,
+        "notes": [
+          "Filename and directory preservation matter.",
+          "The source path must remain read-only throughout the run."
+        ]
+      },
+      "evidence": {
+        "requiredArtifacts": [
+          "scan-report",
+          "support-bundle",
+          "export-hashes"
+        ],
+        "competitorRunMode": "manual"
+      }
+    },
+    {
+      "id": "ntfs_named_streams_v1",
+      "title": "NTFS deleted file with alternate data streams",
+      "priority": "P1",
+      "readiness": "ready-in-repo",
+      "filesystem": "ntfs",
+      "class": "deleted-file",
+      "difficulty": "advanced",
+      "platforms": [
+        "macos",
+        "linux",
+        "windows"
+      ],
+      "source": {
+        "kind": "rust-test-generator",
+        "location": "src-tauri/src/analyzers/ntfs.rs",
+        "generator": "synthetic_ntfs_named_streams_image",
+        "notes": "Covers alternate stream handling and export fidelity."
+      },
+      "groundTruth": {
+        "expectedRecoverableItemsMin": 1,
+        "expectedIntactExportsMin": 1,
+        "notes": [
+          "ADS presence must be preserved or explicitly reported as unsupported."
+        ]
+      },
+      "evidence": {
+        "requiredArtifacts": [
+          "scan-report",
+          "export-hashes"
+        ],
+        "competitorRunMode": "manual"
+      }
+    },
+    {
+      "id": "ntfs_compressed_deleted_v1",
+      "title": "NTFS deleted compressed file",
+      "priority": "P0",
+      "readiness": "ready-in-repo",
+      "filesystem": "ntfs",
+      "class": "deleted-file",
+      "difficulty": "advanced",
+      "platforms": [
+        "macos",
+        "linux",
+        "windows"
+      ],
+      "source": {
+        "kind": "rust-test-generator",
+        "location": "src-tauri/src/analyzers/ntfs.rs",
+        "generator": "synthetic_compressed_deleted_ntfs_image",
+        "notes": "Measures compressed non-resident reconstruction quality."
+      },
+      "groundTruth": {
+        "expectedRecoverableItemsMin": 1,
+        "expectedIntactExportsMin": 1,
+        "notes": [
+          "The exported payload should match the decompressed expected content."
+        ]
+      },
+      "evidence": {
+        "requiredArtifacts": [
+          "scan-report",
+          "support-bundle",
+          "export-hashes"
+        ],
+        "competitorRunMode": "manual"
+      }
+    },
+    {
+      "id": "ext4_deleted_indexed_extent_v1",
+      "title": "ext4 deleted file backed by indexed extents",
+      "priority": "P0",
+      "readiness": "ready-in-repo",
+      "filesystem": "ext4",
+      "class": "deleted-file",
+      "difficulty": "medium",
+      "platforms": [
+        "macos",
+        "linux",
+        "windows"
+      ],
+      "source": {
+        "kind": "rust-test-generator",
+        "location": "src-tauri/src/analyzers/ext4.rs",
+        "generator": "synthetic_deleted_ext4_indexed_extent_image_for_tests",
+        "notes": "Useful for extent-tree reconstruction quality."
+      },
+      "groundTruth": {
+        "expectedRecoverableItemsMin": 1,
+        "expectedIntactExportsMin": 1,
+        "notes": [
+          "Recovered path should remain rooted in orphaned inode context unless later improved."
+        ]
+      },
+      "evidence": {
+        "requiredArtifacts": [
+          "scan-report",
+          "export-hashes"
+        ],
+        "competitorRunMode": "manual"
+      }
+    },
+    {
+      "id": "hfsplus_deleted_overflow_v1",
+      "title": "HFS+ deleted file requiring overflow extents",
+      "priority": "P1",
+      "readiness": "ready-in-repo",
+      "filesystem": "hfsplus",
+      "class": "deleted-file",
+      "difficulty": "advanced",
+      "platforms": [
+        "macos",
+        "linux",
+        "windows"
+      ],
+      "source": {
+        "kind": "rust-test-generator",
+        "location": "src-tauri/src/analyzers/hfsplus.rs",
+        "generator": "synthetic_deleted_hfsplus_overflow_image_for_tests",
+        "notes": "Exercises HFS+ overflow extent traversal."
+      },
+      "groundTruth": {
+        "expectedRecoverableItemsMin": 1,
+        "expectedIntactExportsMin": 1,
+        "notes": [
+          "Directory preservation matters.",
+          "Partial recovery must be marked explicitly if the full fork is not rebuilt."
+        ]
+      },
+      "evidence": {
+        "requiredArtifacts": [
+          "scan-report",
+          "export-hashes"
+        ],
+        "competitorRunMode": "manual"
+      }
+    },
+    {
+      "id": "apfs_deleted_orphan_catalog_v1",
+      "title": "APFS orphaned catalog deleted-file recovery",
+      "priority": "P0",
+      "readiness": "public-artifact-pending",
+      "filesystem": "apfs",
+      "class": "deleted-file",
+      "difficulty": "medium",
+      "platforms": [
+        "macos"
+      ],
+      "source": {
+        "kind": "rust-test-generator",
+        "location": "src-tauri/src/analyzers/apfs.rs",
+        "generator": "test_support::create_raw_apfs_image_for_tests",
+        "notes": "Current APFS deleted-fixture generation is macOS-only and the live-catalog orphan path is not yet deterministic on macOS 15.7.4."
+      },
+      "groundTruth": {
+        "expectedRecoverableItemsMin": 1,
+        "expectedIntactExportsMin": 1,
+        "notes": [
+          "Current benchmark scope is conservative orphan-catalog recovery, not full APFS parity.",
+          "Scenario remains P0 but is not publication-ready until the macOS fixture/path is stabilized."
+        ]
+      },
+      "evidence": {
+        "requiredArtifacts": [
+          "scan-report",
+          "export-hashes"
+        ],
+        "competitorRunMode": "manual"
+      }
+    },
+    {
+      "id": "lost_volume_hfsplus_slice_v1",
+      "title": "Lost-volume detection and slice analysis for embedded HFS+ volume",
+      "priority": "P1",
+      "readiness": "ready-in-repo",
+      "filesystem": "hfsplus",
+      "class": "lost-volume",
+      "difficulty": "advanced",
+      "platforms": [
+        "macos",
+        "linux",
+        "windows"
+      ],
+      "source": {
+        "kind": "command-test-fixture",
+        "location": "src-tauri/src/commands/mod.rs",
+        "generator": "run_potential_volume_scan_catalogs_hfsplus_overflow_backed_files_from_detected_candidate",
+        "notes": "Represents missing-partition style recovery from a larger raw image."
+      },
+      "groundTruth": {
+        "expectedRecoverableItemsMin": 2,
+        "expectedIntactExportsMin": 1,
+        "notes": [
+          "The workflow should identify the potential volume before analyzing the embedded slice."
+        ]
+      },
+      "evidence": {
+        "requiredArtifacts": [
+          "scan-report",
+          "support-bundle"
+        ],
+        "competitorRunMode": "manual"
+      }
+    },
+    {
+      "id": "signature_carving_jpeg_v1",
+      "title": "Signature carving for a recoverable JPEG payload",
+      "priority": "P0",
+      "readiness": "ready-in-repo",
+      "filesystem": "raw",
+      "class": "carving",
+      "difficulty": "medium",
+      "platforms": [
+        "macos",
+        "linux",
+        "windows"
+      ],
+      "source": {
+        "kind": "command-test-fixture",
+        "location": "src-tauri/src/commands/mod.rs",
+        "generator": "scan-signature-carving test fixtures",
+        "notes": "Promote the inline JPEG fixture recipe to a dedicated generator before public publication."
+      },
+      "groundTruth": {
+        "expectedRecoverableItemsMin": 1,
+        "expectedIntactExportsMin": 1,
+        "notes": [
+          "Carved result naming may differ across tools; byte-level integrity matters more than path fidelity."
+        ]
+      },
+      "evidence": {
+        "requiredArtifacts": [
+          "scan-report",
+          "export-hashes"
+        ],
+        "competitorRunMode": "manual"
+      }
+    },
+    {
+      "id": "unstable_media_cautious_resume_v1",
+      "title": "Unstable media imaging with cautious retries and resumability",
+      "priority": "P0",
+      "readiness": "public-artifact-pending",
+      "filesystem": "raw",
+      "class": "unstable-media",
+      "difficulty": "advanced",
+      "platforms": [
+        "macos",
+        "linux",
+        "windows"
+      ],
+      "source": {
+        "kind": "controlled-reader-scenario",
+        "location": "src-tauri/src/imaging/mod.rs",
+        "generator": "create_read_only_image_at_controlled_with_profile test scenarios",
+        "notes": "Needs a redistributable benchmark artifact or harness before cross-tool publication."
+      },
+      "groundTruth": {
+        "expectedRecoverableItemsMin": 0,
+        "expectedIntactExportsMin": 0,
+        "notes": [
+          "This scenario measures imaging behavior, gap visibility, and resumability rather than file recovery count."
+        ]
+      },
+      "evidence": {
+        "requiredArtifacts": [
+          "imaging-report",
+          "support-bundle",
+          "gap-map"
+        ],
+        "competitorRunMode": "manual"
+      }
+    }
+  ]
+}

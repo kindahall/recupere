@@ -1,0 +1,124 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-04-23T19:15:00+02:00",
+  "tracks": [
+    {
+      "id": "TT-02",
+      "title": "bootable rescue workflow",
+      "status": "partial",
+      "evidence": [
+        "bootable rescue MVP documentation",
+        "release rescue-workflow metadata",
+        "release preflight rescue doc check"
+      ],
+      "blockingGaps": [
+        "custom rescue media still absent",
+        "real boot validation across broader hardware remains open"
+      ]
+    },
+    {
+      "id": "TT-03",
+      "title": "unstable-media imaging",
+      "status": "partial",
+      "evidence": [
+        "live imaging incident telemetry",
+        "rescue-map export",
+        "imaging incident report",
+        "history/operator handoff",
+        "support bundle imaging handoff",
+        "precise unreadable-range samples"
+      ],
+      "blockingGaps": [
+        "broader degraded-media corpus",
+        "more engine-level comparative evidence"
+      ]
+    },
+    {
+      "id": "TT-04",
+      "title": "advanced storage and lab workflows",
+      "status": "partial",
+      "evidence": [
+        "reconstructed RAID analysis image workflow",
+        "imported-source provenance",
+        "expert technical readiness",
+        "source-type support posture"
+      ],
+      "blockingGaps": [
+        "VM/NAS/storage-class matrix still incomplete",
+        "fewer benchmark-grade fixtures than market leaders"
+      ]
+    },
+    {
+      "id": "TT-05",
+      "title": "APFS, encryption, and difficult macOS cases",
+      "status": "partial",
+      "evidence": [
+        "APFS provenance and preview-first triage",
+        "diagnostic encryption gate",
+        "scan encryption gate",
+        "device encryption recovery posture"
+      ],
+      "blockingGaps": [
+        "deleted APFS orphan-catalog benchmark path is not deterministic on macOS 15.7.4",
+        "APFS snapshot/clone parity remains open",
+        "full difficult-case macOS coverage remains open"
+      ]
+    },
+    {
+      "id": "TT-01",
+      "title": "public benchmark proof",
+      "status": "partial",
+      "evidence": [
+        "corpus manifest",
+        "protocol v1",
+        "internal baseline",
+        "scoped benchmark run metadata",
+        "full PhotoRec 7.2 accessible P0 campaign result",
+        "full TestDisk 7.2 accessible P0 campaign result",
+        "targeted DMDE 4.4.6 competitor result",
+        "fresh 2026-04-23 APFS blocker proof",
+        "archived optional R-Studio 7.5.191751 operator notes",
+        "public comparative campaign runbook",
+        "html report generator",
+        "top-tier scorecard"
+      ],
+      "blockingGaps": [
+        "public comparative evidence remains limited to the first accessible baseline slice",
+        "full public-campaign Recupere run across the ready-in-repo P0 slice is still missing",
+        "apfs_deleted_orphan_catalog_v1 remains blocked on macOS 15.7.4",
+        "broader public market proof still missing"
+      ]
+    },
+    {
+      "id": "TT-07",
+      "title": "premium UX, audit, and reporting",
+      "status": "partial",
+      "evidence": [
+        "history and handoff flows",
+        "support bundle posture",
+        "novice/expert workflow separation",
+        "audit chain tip hash visibility",
+        "clearer limitation messaging"
+      ],
+      "blockingGaps": [
+        "signed audit artefacts still absent",
+        "stress-path polish remains incomplete"
+      ]
+    },
+    {
+      "id": "TT-08",
+      "title": "docs, packaging, QA, and release readiness",
+      "status": "partial",
+      "evidence": [
+        "cargo check validation",
+        "ui test validation",
+        "benchmark workspace validation",
+        "release rescue-workflow metadata",
+        "more honest source support documentation"
+      ],
+      "blockingGaps": [
+        "broader release and commercial readiness proof is still open"
+      ]
+    }
+  ]
+}

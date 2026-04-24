@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noEmit": true,
+    "types": ["node", "@wdio/types", "@wdio/mocha-framework", "@wdio/globals/types", "webdriverio", "expect-webdriverio", "mocha"],
+    "lib": ["ES2022", "DOM"]
+  },
+  "include": ["wdio.tauri-driver.conf.ts", "wdio.appium.conf.ts", "e2e/native/**/*.ts"]
+}

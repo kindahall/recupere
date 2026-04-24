@@ -1,0 +1,261 @@
+{
+  "templateVersion": 1,
+  "generatedAt": "2026-04-12T12:00:00+02:00",
+  "manifest": {
+    "corpusId": "recupere-benchmark-corpus-v1",
+    "schemaVersion": 1,
+    "statusDate": "2026-04-11"
+  },
+  "run": {
+    "toolName": "Récupère",
+    "toolVersion": "0.1.0",
+    "buildRef": "tt01-internal-baseline-2026-04-12",
+    "hostOs": "Darwin",
+    "hostArch": "x86_64",
+    "operator": "Codex",
+    "runScope": "internal-baseline",
+    "campaignId": "",
+    "notes": "Internal synthetic baseline derived from targeted Rust tests on 2026-04-12. This is not yet the public comparative benchmark and several scenarios remain completed-with-gaps because benchmark-grade reports, hashes, or support bundles are not stored yet."
+  },
+  "scenarios": [
+    {
+      "id": "ntfs_deleted_basic_v1",
+      "status": "completed-with-gaps",
+      "evidenceLevel": "test-backed-synthetic",
+      "measurementMode": "asserted-minimum",
+      "metrics": {
+        "filesFound": 2,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": true
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": [
+          "scan-report",
+          "support-bundle",
+          "export-hashes"
+        ]
+      },
+      "evidenceRefs": [
+        "2026-04-12 cargo test: commands::tests::run_deleted_ntfs_scan_recovers_deleted_entries_from_a_local_image"
+      ],
+      "notes": "At least two deleted NTFS candidates are proven by the targeted test, including one intact file and one partial file. Export for this exact baseline scenario is not yet captured as benchmark evidence."
+    },
+    {
+      "id": "ntfs_named_streams_v1",
+      "status": "completed-with-gaps",
+      "evidenceLevel": "test-backed-synthetic",
+      "measurementMode": "direct-test-assertion",
+      "metrics": {
+        "filesFound": 1,
+        "intactExports": 1,
+        "partialUsableExports": 0,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": true
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": [
+          "scan-report",
+          "export-hashes"
+        ]
+      },
+      "evidenceRefs": [
+        "2026-04-12 cargo test: commands::tests::run_deleted_ntfs_scan_surfaces_named_data_stream_metadata",
+        "2026-04-12 cargo test: commands::tests::run_export_session_writes_ntfs_ads_sidecars"
+      ],
+      "notes": "The baseline proves named stream metadata is surfaced and the ADS sidecar is exported successfully. Benchmark-grade hash artifacts are not stored yet."
+    },
+    {
+      "id": "ntfs_compressed_deleted_v1",
+      "status": "completed-with-gaps",
+      "evidenceLevel": "test-backed-synthetic",
+      "measurementMode": "direct-test-assertion",
+      "metrics": {
+        "filesFound": 1,
+        "intactExports": 1,
+        "partialUsableExports": 0,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": true
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": [
+          "scan-report",
+          "support-bundle",
+          "export-hashes"
+        ]
+      },
+      "evidenceRefs": [
+        "2026-04-12 cargo test: commands::tests::run_deleted_ntfs_scan_surfaces_lznt1_compression_metadata",
+        "2026-04-12 cargo test: commands::tests::run_export_session_reconstructs_deleted_compressed_ntfs_file_from_image"
+      ],
+      "notes": "The compressed NTFS scenario is proven through scan metadata plus a successful reconstructed export, but benchmark artifacts are still missing."
+    },
+    {
+      "id": "ext4_deleted_indexed_extent_v1",
+      "status": "completed-with-gaps",
+      "evidenceLevel": "test-backed-synthetic",
+      "measurementMode": "direct-test-assertion",
+      "metrics": {
+        "filesFound": 1,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": true
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": [
+          "scan-report",
+          "export-hashes"
+        ]
+      },
+      "evidenceRefs": [
+        "2026-04-12 cargo test: analyzers::ext4::tests::recover_deleted_files_reads_indexed_extent_tree_nodes"
+      ],
+      "notes": "The current baseline proves deleted ext4 indexed extent parsing and reconstruction metadata, but not yet an end-to-end export artifact for this exact scenario."
+    },
+    {
+      "id": "hfsplus_deleted_overflow_v1",
+      "status": "completed-with-gaps",
+      "evidenceLevel": "test-backed-synthetic",
+      "measurementMode": "direct-test-assertion",
+      "metrics": {
+        "filesFound": 1,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": true
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": [
+          "scan-report",
+          "export-hashes"
+        ]
+      },
+      "evidenceRefs": [
+        "2026-04-12 cargo test: analyzers::hfsplus::tests::recover_deleted_files_reads_hfsplus_overflow_extents"
+      ],
+      "notes": "This baseline proves deleted HFS+ overflow extent reconstruction at analyzer level. Export-grade benchmark artifacts are not captured yet."
+    },
+    {
+      "id": "apfs_deleted_orphan_catalog_v1",
+      "status": "not-run",
+      "evidenceLevel": "pending-benchmark-evidence",
+      "measurementMode": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": [
+          "scan-report",
+          "export-hashes"
+        ]
+      },
+      "evidenceRefs": [],
+      "notes": "The manifest scenario exists, but this baseline does not yet include a dedicated deleted-APFS end-to-end benchmark run."
+    },
+    {
+      "id": "lost_volume_hfsplus_slice_v1",
+      "status": "completed-with-gaps",
+      "evidenceLevel": "test-backed-synthetic",
+      "measurementMode": "direct-test-assertion",
+      "metrics": {
+        "filesFound": 2,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": true
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": [
+          "scan-report",
+          "support-bundle"
+        ]
+      },
+      "evidenceRefs": [
+        "2026-04-12 cargo test: commands::tests::run_potential_volume_scan_catalogs_hfsplus_overflow_backed_files_from_detected_candidate"
+      ],
+      "notes": "The targeted test proves the workflow detects the embedded HFS+ volume and surfaces both visible and deleted files. Benchmark report artifacts are not yet stored."
+    },
+    {
+      "id": "signature_carving_jpeg_v1",
+      "status": "completed-with-gaps",
+      "evidenceLevel": "test-backed-synthetic",
+      "measurementMode": "direct-test-assertion",
+      "metrics": {
+        "filesFound": 1,
+        "intactExports": 1,
+        "partialUsableExports": 0,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": true
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": [
+          "scan-report",
+          "export-hashes"
+        ]
+      },
+      "evidenceRefs": [
+        "2026-04-12 cargo test: commands::tests::run_signature_carving_scan_detects_known_file_signatures",
+        "2026-04-12 cargo test: commands::tests::run_export_session_reconstructs_carved_file_from_image"
+      ],
+      "notes": "The baseline proves one carved JPEG candidate is detected and exported successfully, but no benchmark hash or report artifact is retained yet."
+    },
+    {
+      "id": "unstable_media_cautious_resume_v1",
+      "status": "completed-with-gaps",
+      "evidenceLevel": "test-backed-synthetic",
+      "measurementMode": "capability-proof",
+      "metrics": {
+        "filesFound": 0,
+        "intactExports": 0,
+        "partialUsableExports": 0,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": true
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": [
+          "imaging-report",
+          "support-bundle",
+          "gap-map"
+        ]
+      },
+      "evidenceRefs": [
+        "2026-04-12 cargo test: imaging::tests::create_read_only_image_at_resumes_targeted_rescue_passes_from_checkpoint",
+        "2026-04-12 cargo test: imaging::tests::import_external_rescue_map_for_image_destination_seeds_checkpoint_and_resumes_targeted_repair"
+      ],
+      "notes": "This scenario measures resumability and targeted repair capability rather than recovered file count. The current baseline proves cautious resume and external rescue-map reuse, but not yet a publishable unstable-media artifact pack."
+    }
+  ]
+}

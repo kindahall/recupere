@@ -1,0 +1,192 @@
+{
+  "templateVersion": 1,
+  "generatedAt": "2026-04-22T15:43:33.540Z",
+  "manifest": {
+    "corpusId": "recupere-benchmark-corpus-v1",
+    "schemaVersion": 1,
+    "statusDate": "2026-04-11"
+  },
+  "run": {
+    "toolName": "PhotoRec",
+    "toolVersion": "7.2",
+    "buildRef": "signature-carving-jpeg-2026-04-22",
+    "hostOs": "macOS 15.7.4",
+    "hostArch": "x86_64",
+    "operator": "Codex",
+    "runScope": "spot-check",
+    "campaignId": "",
+    "notes": "Targeted competitor run using official scripted mode on the exact minimal JPEG benchmark fixture used by the repo tests."
+  },
+  "scenarios": [
+    {
+      "id": "ntfs_deleted_basic_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    },
+    {
+      "id": "ntfs_named_streams_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    },
+    {
+      "id": "ntfs_compressed_deleted_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    },
+    {
+      "id": "ext4_deleted_indexed_extent_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    },
+    {
+      "id": "hfsplus_deleted_overflow_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    },
+    {
+      "id": "apfs_deleted_orphan_catalog_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    },
+    {
+      "id": "lost_volume_hfsplus_slice_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    },
+    {
+      "id": "signature_carving_jpeg_v1",
+      "status": "completed",
+      "metrics": {
+        "filesFound": 0,
+        "intactExports": 0,
+        "partialUsableExports": 0,
+        "falsePositives": 0,
+        "timeToFirstSafeActionSeconds": 0,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": true
+      },
+      "artifacts": {
+        "paths": [
+          "/Users/Artisaul/Desktop/recupere/photorec.log",
+          "/tmp/recupere-photorec-benchmark-jpeg.img"
+        ],
+        "missing": [
+          "export-hashes"
+        ]
+      },
+      "evidenceRefs": [
+        "2026-04-22 photorec /log /d /tmp/photorec-benchmark-out /cmd /tmp/recupere-photorec-benchmark-jpeg.img partition_none,fileopt,everything,disable,jpg,enable,wholespace,search"
+      ],
+      "notes": "PhotoRec 7.2 executed successfully in official scripted mode against the exact 128-byte minimal JPEG fixture used by the repo tests, but recovered 0 file. This is a real weaker competitor outcome, not a missing run."
+    },
+    {
+      "id": "unstable_media_cautious_resume_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    }
+  ]
+}

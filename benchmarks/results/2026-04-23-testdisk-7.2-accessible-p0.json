@@ -1,0 +1,224 @@
+{
+  "templateVersion": 1,
+  "generatedAt": "2026-04-23T15:31:00.515Z",
+  "manifest": {
+    "corpusId": "recupere-benchmark-corpus-v1",
+    "schemaVersion": 1,
+    "statusDate": "2026-04-11"
+  },
+  "run": {
+    "toolName": "TestDisk",
+    "toolVersion": "7.2",
+    "buildRef": "accessible-p0-campaign-2026-04-23",
+    "hostOs": "macOS 15.7.4",
+    "hostArch": "x86_64",
+    "operator": "Codex",
+    "runScope": "public-campaign",
+    "campaignId": "public-comparative-campaign-v1",
+    "notes": "Accessible baseline run across all ready-in-repo P0 scenarios using official /cmd scripted mode where possible."
+  },
+  "scenarios": [
+    {
+      "id": "ntfs_deleted_basic_v1",
+      "status": "unsupported",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [
+          "/tmp/recupere-benchmark-fixtures/ntfs_deleted_basic_v1.img",
+          "/tmp/testdisk-campaign/ntfs_deleted_basic_v1/testdisk.log"
+        ],
+        "missing": [
+          "scan-report",
+          "export-hashes"
+        ]
+      },
+      "notes": "The installed TestDisk 7.2 build identifies the filesystem container but reports that support for this filesystem was not enabled during compilation, so the scenario remains explicitly unsupported in this environment.",
+      "evidenceRefs": [
+        "2026-04-23 testdisk /debug /log /cmd input.img partition_none,advanced,undelete",
+        "2026-04-23 installed build reports ntfs/ext2 support disabled during compilation"
+      ]
+    },
+    {
+      "id": "ntfs_named_streams_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    },
+    {
+      "id": "ntfs_compressed_deleted_v1",
+      "status": "unsupported",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [
+          "/tmp/recupere-benchmark-fixtures/ntfs_compressed_deleted_v1.img",
+          "/tmp/testdisk-campaign/ntfs_compressed_deleted_v1/testdisk.log"
+        ],
+        "missing": [
+          "scan-report",
+          "export-hashes"
+        ]
+      },
+      "notes": "The installed TestDisk 7.2 build identifies the filesystem container but reports that support for this filesystem was not enabled during compilation, so the scenario remains explicitly unsupported in this environment.",
+      "evidenceRefs": [
+        "2026-04-23 testdisk /debug /log /cmd input.img partition_none,advanced,undelete",
+        "2026-04-23 installed build reports ntfs/ext2 support disabled during compilation"
+      ]
+    },
+    {
+      "id": "ext4_deleted_indexed_extent_v1",
+      "status": "unsupported",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [
+          "/tmp/recupere-benchmark-fixtures/ext4_deleted_indexed_extent_v1.img",
+          "/tmp/testdisk-campaign/ext4_deleted_indexed_extent_v1/testdisk.log"
+        ],
+        "missing": [
+          "scan-report",
+          "export-hashes"
+        ]
+      },
+      "notes": "The installed TestDisk 7.2 build identifies the filesystem container but reports that support for this filesystem was not enabled during compilation, so the scenario remains explicitly unsupported in this environment.",
+      "evidenceRefs": [
+        "2026-04-23 testdisk /debug /log /cmd input.img partition_none,advanced,undelete",
+        "2026-04-23 installed build reports ntfs/ext2 support disabled during compilation"
+      ]
+    },
+    {
+      "id": "hfsplus_deleted_overflow_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    },
+    {
+      "id": "apfs_deleted_orphan_catalog_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    },
+    {
+      "id": "lost_volume_hfsplus_slice_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    },
+    {
+      "id": "signature_carving_jpeg_v1",
+      "status": "unsupported",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [
+          "/tmp/recupere-benchmark-fixtures/signature_carving_jpeg_v1.img",
+          "/tmp/testdisk-campaign/signature_carving_jpeg_v1/testdisk.log"
+        ],
+        "missing": [
+          "scan-report",
+          "export-hashes"
+        ]
+      },
+      "notes": "TestDisk is not a carving workflow in this installed build and the raw JPEG fixture is reported as unsupported rather than silently omitted.",
+      "evidenceRefs": [
+        "2026-04-23 testdisk /debug /log /cmd input.img partition_none,advanced,undelete",
+        "2026-04-23 installed build reports that support for the unknown/raw filesystem has not been implemented"
+      ]
+    },
+    {
+      "id": "unstable_media_cautious_resume_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    }
+  ]
+}

@@ -1,0 +1,220 @@
+{
+  "templateVersion": 1,
+  "generatedAt": "2026-04-23T15:31:00.516Z",
+  "manifest": {
+    "corpusId": "recupere-benchmark-corpus-v1",
+    "schemaVersion": 1,
+    "statusDate": "2026-04-11"
+  },
+  "run": {
+    "toolName": "PhotoRec",
+    "toolVersion": "7.2",
+    "buildRef": "accessible-p0-campaign-2026-04-23",
+    "hostOs": "macOS 15.7.4",
+    "hostArch": "x86_64",
+    "operator": "Codex",
+    "runScope": "public-campaign",
+    "campaignId": "public-comparative-campaign-v1",
+    "notes": "Accessible baseline run across all ready-in-repo P0 scenarios using official scripted mode."
+  },
+  "scenarios": [
+    {
+      "id": "ntfs_deleted_basic_v1",
+      "status": "completed",
+      "metrics": {
+        "filesFound": 0,
+        "intactExports": 0,
+        "partialUsableExports": 0,
+        "falsePositives": 0,
+        "timeToFirstSafeActionSeconds": 0,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": true
+      },
+      "artifacts": {
+        "paths": [
+          "/tmp/recupere-benchmark-fixtures/ntfs_deleted_basic_v1.img",
+          "/tmp/photorec-campaign/ntfs_deleted_basic_v1/work/photorec.log",
+          "/tmp/photorec-campaign/ntfs_deleted_basic_v1/out.1/report.xml"
+        ],
+        "missing": [
+          "export-hashes"
+        ]
+      },
+      "notes": "PhotoRec 7.2 completed against the synthetic fixture in official scripted mode and found 0 file. This is recorded as a real weaker outcome, not a missing run.",
+      "evidenceRefs": [
+        "2026-04-23 photorec /log /d ../out /cmd input.img partition_none,fileopt,everything,disable,txt,enable,jpg,enable,wholespace,search"
+      ]
+    },
+    {
+      "id": "ntfs_named_streams_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    },
+    {
+      "id": "ntfs_compressed_deleted_v1",
+      "status": "completed",
+      "metrics": {
+        "filesFound": 0,
+        "intactExports": 0,
+        "partialUsableExports": 0,
+        "falsePositives": 0,
+        "timeToFirstSafeActionSeconds": 0,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": true
+      },
+      "artifacts": {
+        "paths": [
+          "/tmp/recupere-benchmark-fixtures/ntfs_compressed_deleted_v1.img",
+          "/tmp/photorec-campaign/ntfs_compressed_deleted_v1/work/photorec.log",
+          "/tmp/photorec-campaign/ntfs_compressed_deleted_v1/out.1/report.xml"
+        ],
+        "missing": [
+          "export-hashes"
+        ]
+      },
+      "notes": "PhotoRec 7.2 completed against the synthetic fixture in official scripted mode and found 0 file. This is recorded as a real weaker outcome, not a missing run.",
+      "evidenceRefs": [
+        "2026-04-23 photorec /log /d ../out /cmd input.img partition_none,fileopt,everything,disable,txt,enable,jpg,enable,wholespace,search"
+      ]
+    },
+    {
+      "id": "ext4_deleted_indexed_extent_v1",
+      "status": "completed",
+      "metrics": {
+        "filesFound": 0,
+        "intactExports": 0,
+        "partialUsableExports": 0,
+        "falsePositives": 0,
+        "timeToFirstSafeActionSeconds": 0,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": true
+      },
+      "artifacts": {
+        "paths": [
+          "/tmp/recupere-benchmark-fixtures/ext4_deleted_indexed_extent_v1.img",
+          "/tmp/photorec-campaign/ext4_deleted_indexed_extent_v1/work/photorec.log",
+          "/tmp/photorec-campaign/ext4_deleted_indexed_extent_v1/out.1/report.xml"
+        ],
+        "missing": [
+          "export-hashes"
+        ]
+      },
+      "notes": "PhotoRec 7.2 completed against the synthetic fixture in official scripted mode and found 0 file. This is recorded as a real weaker outcome, not a missing run.",
+      "evidenceRefs": [
+        "2026-04-23 photorec /log /d ../out /cmd input.img partition_none,fileopt,everything,disable,txt,enable,jpg,enable,wholespace,search"
+      ]
+    },
+    {
+      "id": "hfsplus_deleted_overflow_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    },
+    {
+      "id": "apfs_deleted_orphan_catalog_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    },
+    {
+      "id": "lost_volume_hfsplus_slice_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    },
+    {
+      "id": "signature_carving_jpeg_v1",
+      "status": "completed",
+      "metrics": {
+        "filesFound": 0,
+        "intactExports": 0,
+        "partialUsableExports": 0,
+        "falsePositives": 0,
+        "timeToFirstSafeActionSeconds": 0,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": true
+      },
+      "artifacts": {
+        "paths": [
+          "/tmp/recupere-benchmark-fixtures/signature_carving_jpeg_v1.img",
+          "/tmp/photorec-campaign/signature_carving_jpeg_v1/work/photorec.log",
+          "/tmp/photorec-campaign/signature_carving_jpeg_v1/out.1/report.xml"
+        ],
+        "missing": [
+          "export-hashes"
+        ]
+      },
+      "notes": "PhotoRec 7.2 completed against the synthetic fixture in official scripted mode and found 0 file. This is recorded as a real weaker outcome, not a missing run.",
+      "evidenceRefs": [
+        "2026-04-23 photorec /log /d ../out /cmd input.img partition_none,fileopt,everything,disable,txt,enable,jpg,enable,wholespace,search"
+      ]
+    },
+    {
+      "id": "unstable_media_cautious_resume_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    }
+  ]
+}

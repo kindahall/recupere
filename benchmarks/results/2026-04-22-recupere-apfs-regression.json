@@ -1,0 +1,191 @@
+{
+  "templateVersion": 1,
+  "generatedAt": "2026-04-22T14:34:07.604Z",
+  "manifest": {
+    "corpusId": "recupere-benchmark-corpus-v1",
+    "schemaVersion": 1,
+    "statusDate": "2026-04-11"
+  },
+  "run": {
+    "toolName": "Récupère",
+    "toolVersion": "0.1.0",
+    "buildRef": "apfs-orphan-catalog-regression-2026-04-22",
+    "hostOs": "macOS 15.7.4",
+    "hostArch": "x86_64",
+    "operator": "Codex",
+    "runScope": "targeted-regression",
+    "campaignId": "",
+    "notes": "Targeted APFS orphan-catalog regression check on macOS 15.7.4; only the APFS scenario was exercised directly in this run."
+  },
+  "scenarios": [
+    {
+      "id": "ntfs_deleted_basic_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    },
+    {
+      "id": "ntfs_named_streams_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    },
+    {
+      "id": "ntfs_compressed_deleted_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    },
+    {
+      "id": "ext4_deleted_indexed_extent_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    },
+    {
+      "id": "hfsplus_deleted_overflow_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    },
+    {
+      "id": "apfs_deleted_orphan_catalog_v1",
+      "status": "blocked",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": [
+          "scan-report",
+          "export-hashes"
+        ]
+      },
+      "evidenceRefs": [
+        "2026-04-22 cargo test: analyzers::apfs::tests::recover_deleted_files_reads_a_real_apfs_deleted_fixture",
+        "2026-04-22 cargo test: commands::tests::run_deleted_apfs_scan_marks_results_as_live_catalog_provenance"
+      ],
+      "notes": "Blocked on macOS 15.7.4: the current APFS orphan-catalog fixture path does not surface a deleted candidate reliably enough for benchmark-grade evidence. This run records the blocker instead of leaving the scenario implicit."
+    },
+    {
+      "id": "lost_volume_hfsplus_slice_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    },
+    {
+      "id": "signature_carving_jpeg_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    },
+    {
+      "id": "unstable_media_cautious_resume_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    }
+  ]
+}

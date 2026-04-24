@@ -1,0 +1,268 @@
+name: Release Desktop Bundles
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build-macos-bundle:
+    name: Build macOS signed release bundle
+    runs-on: macos-latest
+    timeout-minutes: 75
+    permissions:
+      contents: write
+    env:
+      RECUPERE_LICENSE_PUBKEY_HEX: ${{ vars.RECUPERE_LICENSE_PUBKEY_HEX || secrets.RECUPERE_LICENSE_PUBKEY_HEX }}
+      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+      APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Release preflight
+        run: npm run release:preflight
+
+      - name: Materialize App Store Connect private key
+        if: env.APPLE_API_PRIVATE_KEY != ''
+        shell: bash
+        run: |
+          mkdir -p .release-secrets
+          printf '%s' "$APPLE_API_PRIVATE_KEY" > .release-secrets/AuthKey.p8
+          echo "APPLE_API_KEY_PATH=$GITHUB_WORKSPACE/.release-secrets/AuthKey.p8" >> "$GITHUB_ENV"
+
+      - name: Derive release signing flags
+        shell: bash
+        run: |
+          if [[ -n "$APPLE_SIGNING_IDENTITY" || -n "$APPLE_CERTIFICATE" ]]; then
+            echo "RELEASE_SIGNED=true" >> "$GITHUB_ENV"
+          else
+            echo "RELEASE_SIGNED=false" >> "$GITHUB_ENV"
+          fi
+
+          if [[ -n "$APPLE_API_KEY" && -n "$APPLE_API_ISSUER" && ( -n "$APPLE_API_KEY_PATH" || -n "$APPLE_API_PRIVATE_KEY" ) ]]; then
+            echo "RELEASE_NOTARIZED=true" >> "$GITHUB_ENV"
+            echo "RELEASE_STAPLED=true" >> "$GITHUB_ENV"
+          else
+            echo "RELEASE_NOTARIZED=false" >> "$GITHUB_ENV"
+            echo "RELEASE_STAPLED=false" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build macOS bundle
+        run: npm run release:build
+
+      - name: Package zipped .app
+        shell: bash
+        run: |
+          mkdir -p dist/release
+          ditto -c -k --sequesterRsrc --keepParent \
+            "src-tauri/target/release/bundle/macos/Récupère.app" \
+            "dist/release/Récupère_${{ github.ref_name || 'manual' }}_macos-app.zip"
+
+      - name: Verify macOS code signature
+        if: env.RELEASE_SIGNED == 'true'
+        shell: bash
+        run: |
+          DMG_PATH=$(find src-tauri/target/release/bundle/dmg -name '*.dmg' | head -n 1)
+          codesign --verify --deep --strict --verbose=2 "src-tauri/target/release/bundle/macos/Récupère.app"
+          codesign --verify --verbose=2 "$DMG_PATH"
+
+      - name: Assess Gatekeeper and stapled notarization
+        if: env.RELEASE_NOTARIZED == 'true'
+        shell: bash
+        run: |
+          APP_PATH="src-tauri/target/release/bundle/macos/Récupère.app"
+          DMG_PATH=$(find src-tauri/target/release/bundle/dmg -name '*.dmg' | head -n 1)
+          spctl --assess --type execute --verbose=4 "$APP_PATH"
+          xcrun stapler validate "$APP_PATH"
+          xcrun stapler validate "$DMG_PATH"
+
+      - name: Generate release manifest
+        env:
+          RELEASE_PLATFORM: macos
+          RELEASE_MANIFEST_SUFFIX: macos
+          RELEASE_SIGNED: ${{ env.RELEASE_SIGNED }}
+          RELEASE_NOTARIZED: ${{ env.RELEASE_NOTARIZED }}
+          RELEASE_STAPLED: ${{ env.RELEASE_STAPLED }}
+        run: npm run release:manifest
+
+      - name: Upload macOS release bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: recupere-macos-release
+          path: |
+            src-tauri/target/release/bundle/dmg/*.dmg
+            dist/release/*macos-app.zip
+            dist/release/release-manifest-*-macos.json
+            dist/release/release-checksums-macos.txt
+            dist/release/release-notes-macos.md
+          if-no-files-found: error
+
+  build-linux-bundle:
+    name: Build Linux unsigned release bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      RECUPERE_LICENSE_PUBKEY_HEX: ${{ vars.RECUPERE_LICENSE_PUBKEY_HEX || secrets.RECUPERE_LICENSE_PUBKEY_HEX }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            patchelf
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Release preflight
+        run: npm run release:preflight
+
+      - name: Build Linux bundle
+        run: npm run release:build
+
+      - name: Generate Linux release manifest
+        env:
+          RELEASE_PLATFORM: linux
+          RELEASE_MANIFEST_SUFFIX: linux
+          RELEASE_SIGNED: "false"
+          RELEASE_NOTARIZED: "false"
+          RELEASE_STAPLED: "false"
+        run: npm run release:manifest
+
+      - name: Upload Linux release bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: recupere-linux-release
+          path: |
+            src-tauri/target/release/bundle/appimage/*.AppImage
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/rpm/*.rpm
+            dist/release/release-manifest-*-linux.json
+            dist/release/release-checksums-linux.txt
+            dist/release/release-notes-linux.md
+          if-no-files-found: error
+
+  build-windows-bundle:
+    name: Build Windows unsigned release bundle
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      RECUPERE_LICENSE_PUBKEY_HEX: ${{ vars.RECUPERE_LICENSE_PUBKEY_HEX || secrets.RECUPERE_LICENSE_PUBKEY_HEX }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Release preflight
+        run: npm run release:preflight
+
+      - name: Build Windows bundle
+        run: npm run release:build
+
+      - name: Generate Windows release manifest
+        env:
+          RELEASE_PLATFORM: windows
+          RELEASE_MANIFEST_SUFFIX: windows
+          RELEASE_SIGNED: "false"
+          RELEASE_NOTARIZED: "false"
+          RELEASE_STAPLED: "false"
+        run: npm run release:manifest
+
+      - name: Upload Windows release bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: recupere-windows-release
+          path: |
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/nsis/*.exe
+            dist/release/release-manifest-*-windows.json
+            dist/release/release-checksums-windows.txt
+            dist/release/release-notes-windows.md
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish desktop release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - build-macos-bundle
+      - build-linux-bundle
+      - build-windows-bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - name: Download all release artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2.6.1
+        with:
+          body_path: release-artifacts/release-notes-macos.md
+          files: |
+            release-artifacts/**/*.dmg
+            release-artifacts/**/*macos-app.zip
+            release-artifacts/**/*.AppImage
+            release-artifacts/**/*.deb
+            release-artifacts/**/*.rpm
+            release-artifacts/**/*.msi
+            release-artifacts/**/*.exe
+            release-artifacts/**/release-manifest-*.json
+            release-artifacts/**/release-checksums*.txt

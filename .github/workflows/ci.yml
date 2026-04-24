@@ -1,0 +1,318 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - "v*"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-cross-platform:
+    name: Verify cross-platform basics (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            patchelf
+
+      - name: Install frontend and backend dependencies
+        run: npm ci
+
+      - name: Validate benchmark workspace
+        run: npm run benchmark:check
+
+      - name: Generate benchmark HTML report
+        run: npm run benchmark:report
+
+      - name: Upload benchmark report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmarks-report-${{ matrix.os }}
+          path: dist/benchmarks-report.html
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: UI tests
+        run: npm run test:ui
+
+      - name: Rust typecheck
+        run: cargo check --manifest-path src-tauri/Cargo.toml
+
+      - name: Rust unit tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --lib
+
+      - name: Frontend production build
+        run: npm run build
+
+  verify-macos:
+    name: Verify macOS desktop pipeline
+    runs-on: macos-latest
+    timeout-minutes: 45
+    env:
+      # Public key only. Use a repository variable by default so PR smoke
+      # can still build release bundles without depending on secret access.
+      RECUPERE_LICENSE_PUBKEY_HEX: ${{ vars.RECUPERE_LICENSE_PUBKEY_HEX || secrets.RECUPERE_LICENSE_PUBKEY_HEX }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Install frontend and backend dependencies
+        run: npm ci
+
+      - name: Validate benchmark workspace
+        run: npm run benchmark:check
+
+      - name: Install Playwright browser
+        run: npx playwright install chromium
+
+      - name: Release preflight
+        run: npm run release:preflight
+
+      - name: Full automated tests
+        run: npm run test
+
+      - name: Rust typecheck
+        run: cargo check --manifest-path src-tauri/Cargo.toml
+
+      - name: Rust unit tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --lib
+
+      - name: Frontend production build
+        run: npm run build
+
+      # Runs Playwright against the `vite preview` bundle (browser-preview
+      # fixtures). This is NOT a native-Tauri E2E — it mocks IPC via
+      # seeded state. A separate tauri-driver harness is tracked under
+      # audit plan chantier C4. Do not rename this step back to a
+      # generic "Desktop E2E" label — it gives false confidence.
+      - name: Browser-preview E2E smoke
+        run: npm run test:e2e
+
+      # Native bundle smoke: builds the Tauri release bundle and asserts
+      # the resulting binary launches cleanly. No UI assertions — those
+      # live in the browser-preview Playwright suite above. This is the
+      # minimum coverage on top of the browser-preview harness; a
+      # full tauri-driver WebDriver suite is the next deliverable of C4.
+      - name: Native bundle smoke (launch-and-exit)
+        run: |
+          npm run release:build
+          node scripts/native-smoke.mjs --timeout-ms 15000 --fail-on-crash
+        env:
+          RECUPERE_NATIVE_SMOKE: "1"
+
+  # The three native E2E jobs (Linux, Windows, macOS) live in their own
+  # workflow `.github/workflows/e2e-native.yml` to keep `ci.yml` fast and
+  # signal-rich. They run on a daily cron, on manual workflow_dispatch, and
+  # on release-tag pushes — not on every pull request. See Chantier 83 in
+  # PLANS.md for the rollout plan.
+
+  code-quality:
+    name: Code quality (biome + rustfmt + clippy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Install Linux system dependencies (for cargo clippy --all-targets)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            patchelf
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      # Frontend: biome lint + format-check. Bloquant.
+      - name: biome lint
+        run: npm run lint
+      - name: biome format check
+        run: npm run format:check
+
+      # Backend: rustfmt bloquant, clippy warn-only initially (plan C4/I1
+      # tightens to -D warnings in a follow-up session after the 30k LOC
+      # codebase has been swept).
+      - name: rustfmt --check
+        run: npm run rust:fmt
+      - name: cargo clippy (warn-level)
+        run: npm run rust:clippy
+
+      # Perf budget smoke: just `cargo bench --no-run` so a broken bench
+      # compiles red without paying the full bench runtime on every PR.
+      # Full bench runs are triggered manually via workflow_dispatch.
+      - name: cargo bench --no-run
+        run: cargo bench --manifest-path src-tauri/Cargo.toml --no-run
+
+  security-audit:
+    name: Security audit (cargo audit + cargo deny)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Install cargo-audit
+        run: cargo install --locked cargo-audit
+      - name: Install cargo-deny
+        run: cargo install --locked cargo-deny
+
+      # `cargo audit` walks RustSec's vulnerability DB. We do NOT pass
+      # `--deny warnings` so that unmaintained crates (e.g. apfs, lznt1)
+      # only fail the build when an actual vulnerability is reported.
+      # Decision: see plan §8.
+      - name: Run cargo audit
+        run: cargo audit --file src-tauri/Cargo.lock || cargo audit
+        working-directory: src-tauri
+
+      # `cargo deny` enforces license policy + supply-chain hygiene.
+      # Configuration lives in src-tauri/deny.toml.
+      - name: Run cargo deny
+        run: cargo deny --manifest-path Cargo.toml check
+        working-directory: src-tauri
+
+  supply-chain-node:
+    name: Security audit (npm audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run npm audit
+        run: npm audit --audit-level=high
+
+  verify-release-packaging:
+    name: Verify release packaging (${{ matrix.os }})
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            patchelf
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Release preflight
+        run: npm run release:preflight
+
+      - name: Build release bundle
+        run: npm run release:build
+
+      - name: Generate SBOM (CycloneDX, Rust + Node)
+        run: npm run release:sbom
+
+      - name: Verify release artifacts
+        run: npm run release:verify
+
+      - name: Upload SBOM + verification report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-provenance-${{ matrix.os }}
+          path: |
+            dist/sbom-rust.json
+            dist/sbom-node.json
+            dist/sbom-summary.json
+            dist/release-verification.json
+          retention-days: 90
+          if-no-files-found: warn

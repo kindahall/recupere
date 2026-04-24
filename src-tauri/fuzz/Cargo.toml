@@ -1,0 +1,38 @@
+[package]
+name = "recupere-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+# See docs/fuzzing.md for the full contract. Every target exercises a parser
+# entry point of the recovery engine against arbitrary bytes. The passing
+# condition is NO panic / NO OOM / NO hang > 10 s per sample — wrong results
+# are acceptable, the parsers already return `Result` and the caller surfaces
+# that to the user. What must never happen is a crash.
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+tempfile = "3"
+
+[dependencies.recupere_lib]
+path = ".."
+# Fuzzers don't need the Tauri GUI glue. `--no-default-features` keeps the
+# fuzz build lean and avoids dragging webkit into the libfuzzer harness.
+default-features = false
+
+[[bin]]
+name = "ntfs_boot"
+path = "fuzz_targets/ntfs_boot.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "carving_signatures"
+path = "fuzz_targets/carving_signatures.rs"
+test = false
+doc = false
+bench = false

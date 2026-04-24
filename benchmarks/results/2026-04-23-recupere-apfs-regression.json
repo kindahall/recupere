@@ -1,0 +1,195 @@
+{
+  "templateVersion": 1,
+  "generatedAt": "2026-04-23T19:00:00+02:00",
+  "manifest": {
+    "corpusId": "recupere-benchmark-corpus-v1",
+    "schemaVersion": 1,
+    "statusDate": "2026-04-11"
+  },
+  "run": {
+    "toolName": "Récupère",
+    "toolVersion": "0.1.0",
+    "buildRef": "apfs-orphan-catalog-regression-2026-04-23",
+    "hostOs": "macOS 15.7.4",
+    "hostArch": "x86_64",
+    "operator": "Codex",
+    "runScope": "targeted-regression",
+    "campaignId": "",
+    "notes": "Targeted APFS orphan-catalog blocker refresh on macOS 15.7.4; only the APFS scenario was exercised directly in this run."
+  },
+  "scenarios": [
+    {
+      "id": "ntfs_deleted_basic_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    },
+    {
+      "id": "ntfs_named_streams_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    },
+    {
+      "id": "ntfs_compressed_deleted_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    },
+    {
+      "id": "ext4_deleted_indexed_extent_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    },
+    {
+      "id": "hfsplus_deleted_overflow_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    },
+    {
+      "id": "apfs_deleted_orphan_catalog_v1",
+      "status": "blocked",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [
+          "benchmarks/results/2026-04-23-recupere-apfs-p0-blocker-note.md"
+        ],
+        "missing": [
+          "scan-report",
+          "export-hashes"
+        ]
+      },
+      "evidenceRefs": [
+        "2026-04-23 cargo test: analyzers::apfs::tests::recover_deleted_files_reads_a_real_apfs_deleted_fixture",
+        "2026-04-23 cargo test: analyzers::apfs::tests::debug_deleted_catalog_candidates_reports_real_deleted_fixture_summary",
+        "2026-04-23 cargo test: commands::tests::run_deleted_apfs_scan_marks_results_as_live_catalog_provenance",
+        "2026-04-23 note: benchmarks/results/2026-04-23-recupere-apfs-p0-blocker-note.md"
+      ],
+      "notes": "Blocked on macOS 15.7.4: fresh same-day execution still fails to surface a deleted APFS orphan candidate from the current real fixture path. The new debug summary shows 3 file inodes and 3 active file ids but 0 deleted inode candidates, so the blocker currently sits in fixture/catalog generation rather than extent reconstruction."
+    },
+    {
+      "id": "lost_volume_hfsplus_slice_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    },
+    {
+      "id": "signature_carving_jpeg_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    },
+    {
+      "id": "unstable_media_cautious_resume_v1",
+      "status": "not-run",
+      "metrics": {
+        "filesFound": null,
+        "intactExports": null,
+        "partialUsableExports": null,
+        "falsePositives": null,
+        "timeToFirstSafeActionSeconds": null,
+        "timeToFirstSuccessfulExportSeconds": null,
+        "readOnlyPreserved": null
+      },
+      "artifacts": {
+        "paths": [],
+        "missing": []
+      },
+      "notes": ""
+    }
+  ]
+}

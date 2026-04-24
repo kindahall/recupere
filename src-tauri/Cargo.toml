@@ -1,0 +1,79 @@
+[package]
+name = "recupere"
+version = "0.1.0"
+description = "Desktop read-only data recovery app with guided diagnostics, imaging, preview, and secure export."
+authors = ["Recupere team"]
+edition = "2021"
+default-run = "recupere"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "recupere_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[features]
+default = ["desktop"]
+# `desktop` pulls in Tauri and the IPC command layer. Disable it (e.g.
+# `--no-default-features`) to build only the headless engine — used by the
+# remote `recupere-agent` binary so it can run on servers without GUI deps.
+desktop = ["dep:tauri", "dep:tauri-plugin-dialog", "dep:tauri-plugin-opener"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset"], optional = true }
+tauri-plugin-dialog = { version = "2", optional = true }
+tauri-plugin-opener = { version = "2", optional = true }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sysinfo = "0.34"
+quick-xml = "0.39"
+zip = { version = "8", default-features = false, features = ["deflate"] }
+crc32fast = "1.4"
+apfs = "0.2.3"
+lznt1 = "0.1.3"
+rayon = "1.10"
+num_cpus = "1.16"
+sha2 = "0.10"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "bmp", "tiff", "webp"] }
+flate2 = "1.0"
+reqwest = { version = "0.12", features = ["blocking", "json"] }
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+base64 = "0.22"
+mac_address = "1"
+notify = "6"
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+dirs = "5"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+plist = "1.8"
+
+[dev-dependencies]
+proptest = { version = "1.8", default-features = false, features = ["std"] }
+criterion = { version = "0.5", default-features = false, features = ["plotters", "cargo_bench_support"] }
+
+[[bench]]
+name = "scoring_budget"
+harness = false
+
+[[bench]]
+name = "preview_quota_budget"
+harness = false
+
+# Minimal lint hardening landed as part of A2 (Sprint 2.1, 2026-04-17).
+# `unused_must_use` = deny catches swallowed `Result`s that silently drop
+# recovery errors. `undocumented_unsafe_blocks` keeps the few `unsafe`
+# blocks we keep (macOS FFI) explicitly annotated with a safety comment.
+# We deliberately do NOT promote the whole clippy suite to deny here — the
+# 90-odd existing clippy warnings are tracked as a follow-up batch.
+[lints.rust]
+unused_must_use = "deny"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "deny"

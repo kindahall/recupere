@@ -1,0 +1,74 @@
+name: Fuzz (weekly)
+
+# Runs cargo-fuzz against the parser entry points once a week. A 10-minute
+# run per target keeps the cost reasonable while still exercising libFuzzer
+# long enough to find new coverage. See docs/fuzzing.md for the contract:
+# zero panic / zero OOM / zero hang > 10 s per sample; wrong parser results
+# are acceptable because callers already handle Result values.
+
+on:
+  schedule:
+    - cron: "0 3 * * 1" # Every Monday, 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    name: Fuzz ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - ntfs_boot
+          - carving_signatures
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Setup nightly Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable action, nightly toolchain
+        with:
+          toolchain: nightly
+
+      - name: Cache cargo artefacts
+        uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
+        with:
+          workspaces: |
+            src-tauri
+            src-tauri/fuzz
+          key: fuzz-${{ matrix.target }}
+
+      - name: Install cargo-fuzz
+        run: cargo install --locked cargo-fuzz
+
+      - name: Run fuzzer (10 min)
+        id: fuzz
+        working-directory: src-tauri
+        # -max_total_time=600  : 10 minutes of wall-clock fuzzing per target.
+        # -runs=-1             : keep iterating until the time budget is up.
+        # libFuzzer exits non-zero on any crash / OOM / hang, which fails the
+        # step — exactly the CI policy from docs/fuzzing.md.
+        run: cargo +nightly fuzz run ${{ matrix.target }} -- -max_total_time=600 -runs=-1
+
+      - name: Upload corpus (coverage inputs)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: fuzz-corpus-${{ matrix.target }}
+          path: src-tauri/fuzz/corpus/${{ matrix.target }}
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload crash artefacts
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: fuzz-artifacts-${{ matrix.target }}
+          path: src-tauri/fuzz/artifacts/${{ matrix.target }}
+          if-no-files-found: ignore
+          retention-days: 90

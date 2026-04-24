@@ -1,0 +1,72 @@
+# cargo-deny configuration
+# https://embarkstudios.github.io/cargo-deny/
+#
+# Enforces license policy and supply-chain hygiene for Récupère's Rust deps.
+# Run locally with: `cargo deny --manifest-path src-tauri/Cargo.toml check`
+
+[graph]
+all-features = false
+no-default-features = false
+
+[output]
+feature-depth = 1
+
+# ----------------------------------------------------------------------------
+# Advisories — RustSec vulnerability DB
+# ----------------------------------------------------------------------------
+# `cargo audit` already gates new CVEs in CI. Here we focus on long-term
+# hygiene (yanked crates) without re-blocking on the same CVEs twice.
+[advisories]
+version = 2
+yanked = "deny"
+ignore = [
+    # Add `RUSTSEC-XXXX-XXXX` IDs here when accepting a known issue, with a
+    # comment explaining why and a follow-up date.
+]
+
+# ----------------------------------------------------------------------------
+# Licenses — accept only well-known permissive ones
+# ----------------------------------------------------------------------------
+[licenses]
+version = 2
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-DFS-2016",
+    "Unicode-3.0",
+    "CC0-1.0",
+    "MPL-2.0",
+    "OpenSSL",
+]
+confidence-threshold = 0.8
+
+[[licenses.exceptions]]
+# `ring` ships an OpenSSL-compatible licence — accepted explicitly.
+name = "ring"
+allow = ["OpenSSL"]
+
+# ----------------------------------------------------------------------------
+# Bans — block specific crates / multiple versions
+# ----------------------------------------------------------------------------
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+highlight = "all"
+
+# Allow common transitive duplicates without flooding output.
+skip = []
+skip-tree = []
+
+# ----------------------------------------------------------------------------
+# Sources — only crates.io is trusted
+# ----------------------------------------------------------------------------
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
