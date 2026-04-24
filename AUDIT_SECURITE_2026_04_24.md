@@ -351,6 +351,14 @@ Publier un harness de benchmark reproductible (images disque synthétiques sous 
 
 Aucun concurrent sauf R-Studio n'a de support UFS/OPAL.
 
+## Statut d'exécution — 2026-04-24
+
+- **D2 livré** : chaque export local réussi produit désormais un `MANIFEST.json` signé Ed25519 dans la racine d'export.
+- Le manifeste contient les SHA-256 par artefact, la version de l'application, le timestamp, la méthode de récupération, le statut de validation et les offsets/runs source disponibles pour l'attestation.
+- La clé d'attestation est locale : keyring OS quand disponible, clé éphémère explicitement marquée sinon. Pas de clé serveur, pas de cloud, pas d'envoi de métadonnées.
+- **D3 confirmé** : `SECURITY.md` et le moteur Gemma/Ollama local documentent déjà l'absence de LLM cloud et de télémétrie.
+- **D1/D4-D12** restent des chantiers roadmap : ne pas promettre publiquement le claim "compilateur Rust prouve le read-only" avant P2.1, ni RAID 50/60, ZFS, OPAL/UFS ou open-core avant implémentation dédiée.
+
 ## Résumé stratégique
 
 | Dimension | Stratégie |

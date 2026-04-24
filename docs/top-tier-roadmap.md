@@ -470,6 +470,7 @@ Transformer les forces actuelles de Récupère en différenciation visible et di
 **Livrables**
 
 - rapports plus premium et potentiellement signés;
+- manifeste d'export `MANIFEST.json` signé Ed25519, avec SHA-256 par artefact et provenance source disponible;
 - mode novice extrêmement clair sur ce qui est possible / incertain / impossible;
 - mode expert plus riche en détails techniques, sans danger UX;
 - meilleure visualisation des risques, de l'imagerie et des limites.
@@ -495,7 +496,8 @@ Transformer les forces actuelles de Récupère en différenciation visible et di
 
 **Sous-tâches**
 
-- [ ] définir le format de rapport premium cible
+- [x] produire un manifeste d'export signé localement
+- [ ] définir le format de rapport premium cible au-dessus du manifeste
 - [ ] revoir les écrans critiques sous stress utilisateur
 - [ ] enrichir le mode expert
 - [ ] harmoniser les messages de limitation et de risque
@@ -506,6 +508,12 @@ Transformer les forces actuelles de Récupère en différenciation visible et di
 - état réel: `[~]`
 - preuves déjà présentes: `History`, handoff support, support bundles et séparation novice / expert sont déjà nettement plus sérieux qu'au départ;
 - ce qui manque encore: artefacts d'audit premium / signés et fermeture plus stricte des parcours sous stress.
+
+**Statut 2026-04-24**
+
+- tranche D2 livrée: chaque export local réussi produit désormais un `MANIFEST.json` signé Ed25519 dans la racine d'export;
+- le manifeste liste les artefacts exportés, tailles, SHA-256, méthode de récupération, statut de validation et offsets/runs source disponibles;
+- limite assumée: signature locale keyring/éphémère, pas encore HSM, identité cabinet, timestamping tiers ou certificat qualifié.
 
 ### `TT-08` Docs, packaging, QA, readiness commerciale
 

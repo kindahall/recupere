@@ -17,6 +17,7 @@
 //     `#[tauri::command]` entrypoints left.
 // ============================================================================
 
+use ed25519_dalek::{Signer, SigningKey};
 use rand::RngCore;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -31,7 +32,7 @@ use chrono::SecondsFormat;
 use crate::core;
 use crate::imaging;
 use crate::types::{
-    DeviceType, ExportError, ExportProgress, ExportSessionSummary, ExportValidation,
+    ByteRun, DeviceType, ExportError, ExportProgress, ExportSessionSummary, ExportValidation,
     HexPreviewLine, ImportedRecoverySourceStatus, LocalHistoryPurgeResult, RecoveredFile,
     TechnicalLogEntry,
 };
@@ -42,6 +43,65 @@ use super::{
     normalize_conflict_strategy, persist_export_session, push_technical_log, unix_timestamp_ms,
     HEX_PREVIEW_LINE_WIDTH,
 };
+
+const EXPORT_MANIFEST_FILE_NAME: &str = "MANIFEST.json";
+const EXPORT_MANIFEST_SCHEMA: &str = "recupere.export-attestation.v1";
+#[cfg(not(test))]
+const EXPORT_ATTESTATION_KEYRING_SERVICE: &str = "recupere";
+#[cfg(not(test))]
+const EXPORT_ATTESTATION_KEYRING_ACCOUNT: &str = "export-attestation-ed25519-v1";
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct ExportManifestPayload {
+    schema: &'static str,
+    export_id: String,
+    scan_id: String,
+    app_version: String,
+    created_at_ms: u64,
+    destination_root: String,
+    source_root_sha256: String,
+    source_root_hint: String,
+    read_only_statement: &'static str,
+    files: Vec<ExportManifestFile>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct ExportManifestFile {
+    file_id: String,
+    artifact_kind: String,
+    stream_name: Option<String>,
+    source_name: String,
+    source_display_path: String,
+    exported_relative_path: String,
+    size_bytes: u64,
+    sha256: String,
+    recovery_method: String,
+    integrity: String,
+    validator_status: Option<String>,
+    source_start_offset: Option<u64>,
+    source_byte_runs: Option<Vec<ByteRun>>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct ExportManifestSignature {
+    algorithm: &'static str,
+    key_scope: &'static str,
+    public_key_hex: String,
+    payload_sha256: String,
+    signature_hex: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct ExportManifestDocument {
+    payload: ExportManifestPayload,
+    signature: ExportManifestSignature,
+}
+
+struct ExportAttestationSigner {
+    signing_key: SigningKey,
+    key_scope: &'static str,
+    warning: Option<String>,
+}
 
 #[cfg_attr(feature = "desktop", tauri::command)]
 #[allow(clippy::too_many_arguments)]
@@ -443,6 +503,8 @@ pub(super) fn run_export_session(
         ),
     );
 
+    let mut manifest_files = Vec::new();
+
     'file_export: for file in files_to_export {
         update_export_progress(&session, |progress| {
             progress.current_file = file.name.clone();
@@ -733,6 +795,35 @@ pub(super) fn run_export_session(
             }
         }
 
+        let mut manifest_entries = match build_export_manifest_entries(
+            &canonical_destination_root,
+            &file,
+            &target_path,
+            resource_fork_sidecar
+                .as_ref()
+                .map(|(path, _)| path.as_path()),
+            &alternate_data_stream_sidecars,
+        ) {
+            Ok(entries) => entries,
+            Err(error) => {
+                let _ = fs::remove_file(&target_path);
+                if let Some((sidecar_path, _)) = resource_fork_sidecar.as_ref() {
+                    let _ = fs::remove_file(sidecar_path);
+                }
+                for (sidecar_path, _, _) in &alternate_data_stream_sidecars {
+                    let _ = fs::remove_file(sidecar_path);
+                }
+                push_export_error(
+                    &session,
+                    file.id.clone(),
+                    file.name.clone(),
+                    format!("Unable to add file to signed export manifest: {error}"),
+                );
+                continue;
+            }
+        };
+        manifest_files.append(&mut manifest_entries);
+
         update_export_progress(&session, |progress| {
             progress.exported_files = progress.exported_files.saturating_add(1);
             progress.exported_bytes = progress
@@ -762,6 +853,31 @@ pub(super) fn run_export_session(
                 target_path.to_string_lossy()
             ),
         );
+    }
+
+    if !manifest_files.is_empty() {
+        match write_export_attestation_manifest(
+            &export_id,
+            &session,
+            &root_path,
+            &canonical_destination_root,
+            manifest_files,
+        ) {
+            Ok(manifest_path) => append_export_log(
+                &session,
+                "info",
+                format!(
+                    "Signed export manifest written to {}.",
+                    manifest_path.to_string_lossy()
+                ),
+            ),
+            Err(error) => push_export_error(
+                &session,
+                "manifest".into(),
+                EXPORT_MANIFEST_FILE_NAME.into(),
+                format!("Unable to write signed export manifest: {error}"),
+            ),
+        }
     }
 
     let mut state = session.lock().expect("export session lock poisoned");
@@ -818,6 +934,285 @@ fn fail_export_session(session: &Arc<Mutex<ExportSession>>, reason: String) {
 
     if let Err(error) = persist_export_session(session) {
         tracing::info!("fail_export_session: unable to persist export snapshot: {error}");
+    }
+}
+
+fn build_export_manifest_entries(
+    destination_root: &Path,
+    file: &RecoveredFile,
+    target_path: &Path,
+    resource_fork_sidecar_path: Option<&Path>,
+    alternate_data_stream_sidecars: &[(PathBuf, u64, String)],
+) -> Result<Vec<ExportManifestFile>, String> {
+    let mut entries = vec![build_export_manifest_file(
+        destination_root,
+        file,
+        target_path,
+        "file",
+        None,
+        file.path.clone(),
+        file.start_offset,
+        file.byte_runs.clone(),
+    )?];
+
+    if let Some(sidecar_path) = resource_fork_sidecar_path {
+        if let Some(resource_fork) = file.resource_fork.as_ref() {
+            entries.push(build_export_manifest_file(
+                destination_root,
+                file,
+                sidecar_path,
+                "resource-fork-sidecar",
+                Some("HFS+ resource fork".into()),
+                format!("{} (HFS+ resource fork)", file.path),
+                None,
+                Some(resource_fork.byte_runs.clone()),
+            )?);
+        }
+    }
+
+    for (sidecar_path, _, stream_name) in alternate_data_stream_sidecars {
+        let stream = file
+            .alternate_data_streams
+            .as_ref()
+            .and_then(|streams| streams.iter().find(|stream| stream.name == *stream_name));
+        entries.push(build_export_manifest_file(
+            destination_root,
+            file,
+            sidecar_path,
+            "alternate-data-stream-sidecar",
+            Some(stream_name.clone()),
+            format!("{}:{}", file.path, stream_name),
+            None,
+            stream.map(|stream| stream.byte_runs.clone()),
+        )?);
+    }
+
+    Ok(entries)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_export_manifest_file(
+    destination_root: &Path,
+    file: &RecoveredFile,
+    artifact_path: &Path,
+    artifact_kind: &str,
+    stream_name: Option<String>,
+    source_display_path: String,
+    source_start_offset: Option<u64>,
+    source_byte_runs: Option<Vec<ByteRun>>,
+) -> Result<ExportManifestFile, String> {
+    let metadata = fs::metadata(artifact_path).map_err(|error| {
+        format!(
+            "unable to read exported artifact metadata {}: {}",
+            artifact_path.to_string_lossy(),
+            error
+        )
+    })?;
+    Ok(ExportManifestFile {
+        file_id: file.id.clone(),
+        artifact_kind: artifact_kind.into(),
+        stream_name,
+        source_name: file.name.clone(),
+        source_display_path,
+        exported_relative_path: manifest_relative_path(destination_root, artifact_path),
+        size_bytes: metadata.len(),
+        sha256: sha256_file(artifact_path)?,
+        recovery_method: file.recovery_method.clone(),
+        integrity: file.integrity.clone(),
+        validator_status: file.validator_status.clone(),
+        source_start_offset,
+        source_byte_runs,
+    })
+}
+
+fn manifest_relative_path(destination_root: &Path, artifact_path: &Path) -> String {
+    artifact_path
+        .strip_prefix(destination_root)
+        .unwrap_or(artifact_path)
+        .to_string_lossy()
+        .replace('\\', "/")
+}
+
+fn write_export_attestation_manifest(
+    export_id: &str,
+    session: &Arc<Mutex<ExportSession>>,
+    root_path: &Path,
+    destination_root: &Path,
+    files: Vec<ExportManifestFile>,
+) -> Result<PathBuf, String> {
+    let (scan_id, destination_path) = {
+        let state = session.lock().expect("export session lock poisoned");
+        (state.scan_id.clone(), state.destination_path.clone())
+    };
+    let payload = ExportManifestPayload {
+        schema: EXPORT_MANIFEST_SCHEMA,
+        export_id: export_id.into(),
+        scan_id,
+        app_version: env!("CARGO_PKG_VERSION").into(),
+        created_at_ms: unix_timestamp_ms(),
+        destination_root: destination_path,
+        source_root_sha256: sha256_text(root_path.to_string_lossy().as_ref()),
+        source_root_hint: "sha256(source root path string)".into(),
+        read_only_statement:
+            "Récupère records exported bytes here; export operations must never write to the source media.",
+        files,
+    };
+
+    let signer = export_attestation_signer();
+    if let Some(warning) = signer.warning.as_ref() {
+        append_export_log(session, "warning", warning.clone());
+    }
+
+    let payload_bytes = serde_json::to_vec(&payload)
+        .map_err(|error| format!("unable to serialize export manifest payload: {error}"))?;
+    let signature = signer.signing_key.sign(&payload_bytes);
+    let manifest = ExportManifestDocument {
+        payload,
+        signature: ExportManifestSignature {
+            algorithm: "ed25519",
+            key_scope: signer.key_scope,
+            public_key_hex: hex_encode(&signer.signing_key.verifying_key().to_bytes()),
+            payload_sha256: sha256_bytes(&payload_bytes),
+            signature_hex: hex_encode(&signature.to_bytes()),
+        },
+    };
+    let artifact_count = manifest.payload.files.len();
+    let manifest_bytes = serde_json::to_vec_pretty(&manifest)
+        .map_err(|error| format!("unable to serialize export manifest: {error}"))?;
+    let manifest_path = destination_root.join(EXPORT_MANIFEST_FILE_NAME);
+    write_private_file_atomically_with_replace(
+        &manifest_path,
+        &manifest_bytes,
+        "export manifest",
+        true,
+    )?;
+    crate::audit::record(
+        crate::audit::AuditEventKind::AuditExported,
+        serde_json::json!({
+            "export_id": export_id,
+            "manifest": EXPORT_MANIFEST_FILE_NAME,
+            "artifact_count": artifact_count,
+            "key_scope": manifest.signature.key_scope,
+        }),
+    );
+    Ok(manifest_path)
+}
+
+#[cfg(test)]
+fn export_attestation_signer() -> ExportAttestationSigner {
+    ExportAttestationSigner {
+        signing_key: SigningKey::from_bytes(&[90_u8; 32]),
+        key_scope: "test-ephemeral",
+        warning: None,
+    }
+}
+
+#[cfg(not(test))]
+fn export_attestation_signer() -> ExportAttestationSigner {
+    let entry = match keyring::Entry::new(
+        EXPORT_ATTESTATION_KEYRING_SERVICE,
+        EXPORT_ATTESTATION_KEYRING_ACCOUNT,
+    ) {
+        Ok(entry) => entry,
+        Err(error) => {
+            return ephemeral_export_attestation_signer(Some(format!(
+                "Export manifest uses an ephemeral signing key because the OS keyring is unavailable: {error}"
+            )));
+        }
+    };
+
+    match entry.get_password() {
+        Ok(seed_hex) => {
+            if let Some(seed) = parse_attestation_seed_hex(&seed_hex) {
+                return ExportAttestationSigner {
+                    signing_key: SigningKey::from_bytes(&seed),
+                    key_scope: "local-keyring",
+                    warning: None,
+                };
+            }
+            let warning = "Export attestation key in the OS keyring was malformed and has been replaced.".to_string();
+            let signer = new_export_attestation_signer("local-keyring", Some(warning.clone()));
+            if let Err(error) = entry.set_password(&hex_encode(&signer.signing_key.to_bytes())) {
+                return ephemeral_export_attestation_signer(Some(format!(
+                    "{warning} The replacement key could not be stored: {error}"
+                )));
+            }
+            signer
+        }
+        Err(keyring::Error::NoEntry) => {
+            let signer = new_export_attestation_signer("local-keyring", None);
+            if let Err(error) = entry.set_password(&hex_encode(&signer.signing_key.to_bytes())) {
+                return ephemeral_export_attestation_signer(Some(format!(
+                    "Export manifest uses an ephemeral signing key because the local attestation key could not be stored: {error}"
+                )));
+            }
+            signer
+        }
+        Err(error) => ephemeral_export_attestation_signer(Some(format!(
+            "Export manifest uses an ephemeral signing key because the local attestation key could not be loaded: {error}"
+        ))),
+    }
+}
+
+#[cfg(not(test))]
+fn ephemeral_export_attestation_signer(warning: Option<String>) -> ExportAttestationSigner {
+    new_export_attestation_signer("ephemeral", warning)
+}
+
+#[cfg(not(test))]
+fn new_export_attestation_signer(
+    key_scope: &'static str,
+    warning: Option<String>,
+) -> ExportAttestationSigner {
+    let mut seed = [0_u8; 32];
+    rand::thread_rng().fill_bytes(&mut seed);
+    ExportAttestationSigner {
+        signing_key: SigningKey::from_bytes(&seed),
+        key_scope,
+        warning,
+    }
+}
+
+#[cfg(not(test))]
+fn parse_attestation_seed_hex(seed_hex: &str) -> Option<[u8; 32]> {
+    hex_decode_32(seed_hex.trim())
+}
+
+fn sha256_text(value: &str) -> String {
+    sha256_bytes(value.as_bytes())
+}
+
+fn sha256_bytes(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    format!("{:x}", hasher.finalize())
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+#[cfg(not(test))]
+fn hex_decode_32(value: &str) -> Option<[u8; 32]> {
+    if value.len() != 64 {
+        return None;
+    }
+    let mut out = [0_u8; 32];
+    for (index, chunk) in value.as_bytes().chunks_exact(2).enumerate() {
+        let high = hex_nibble(chunk[0])?;
+        let low = hex_nibble(chunk[1])?;
+        out[index] = (high << 4) | low;
+    }
+    Some(out)
+}
+
+#[cfg(not(test))]
+fn hex_nibble(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
     }
 }
 
@@ -1456,6 +1851,15 @@ fn random_hex_suffix() -> String {
 }
 
 fn write_private_file_atomically(path: &Path, bytes: &[u8], label: &str) -> Result<(), String> {
+    write_private_file_atomically_with_replace(path, bytes, label, false)
+}
+
+fn write_private_file_atomically_with_replace(
+    path: &Path,
+    bytes: &[u8],
+    label: &str,
+    allow_replace: bool,
+) -> Result<(), String> {
     let parent = path.parent().ok_or_else(|| {
         format!(
             "The selected {label} destination {} has no writable parent directory.",
@@ -1492,7 +1896,7 @@ fn write_private_file_atomically(path: &Path, bytes: &[u8], label: &str) -> Resu
             .map_err(|error| format!("Unable to flush {label}: {error}"))?;
     }
 
-    finalize_temporary_file(&temp_path, path, false)
+    finalize_temporary_file(&temp_path, path, allow_replace)
 }
 
 fn html_escape(s: &str) -> String {
@@ -2797,8 +3201,12 @@ pub(crate) fn verify_reconstructed_export(
 
 #[cfg(test)]
 mod export_tests {
-    use super::default_export_batch_holdout;
+    use super::{
+        default_export_batch_holdout, export_attestation_signer, sha256_bytes, ExportManifestFile,
+        ExportManifestPayload,
+    };
     use crate::types::RecoveredFile;
+    use ed25519_dalek::Signer as _;
 
     fn sample_file(id: &str) -> RecoveredFile {
         RecoveredFile {
@@ -2845,5 +3253,44 @@ mod export_tests {
         let held_out = default_export_batch_holdout(&mixed);
         assert_eq!(held_out.len(), 1);
         assert_eq!(held_out[0].id, apfs.id);
+    }
+
+    #[test]
+    fn export_attestation_signature_verifies_payload_bytes() {
+        let payload = ExportManifestPayload {
+            schema: super::EXPORT_MANIFEST_SCHEMA,
+            export_id: "export-test".into(),
+            scan_id: "scan-test".into(),
+            app_version: "0.1.0".into(),
+            created_at_ms: 42,
+            destination_root: "/tmp/export".into(),
+            source_root_sha256: sha256_bytes(b"/tmp/source"),
+            source_root_hint: "test".into(),
+            read_only_statement: "test",
+            files: vec![ExportManifestFile {
+                file_id: "file-1".into(),
+                artifact_kind: "file".into(),
+                stream_name: None,
+                source_name: "report.txt".into(),
+                source_display_path: "/docs/report.txt".into(),
+                exported_relative_path: "report.txt".into(),
+                size_bytes: 4,
+                sha256: sha256_bytes(b"test"),
+                recovery_method: "catalog".into(),
+                integrity: "intact".into(),
+                validator_status: Some("validated".into()),
+                source_start_offset: Some(128),
+                source_byte_runs: None,
+            }],
+        };
+        let payload_bytes = serde_json::to_vec(&payload).expect("payload should serialize");
+        let signer = export_attestation_signer();
+        let signature = signer.signing_key.sign(&payload_bytes);
+
+        signer
+            .signing_key
+            .verifying_key()
+            .verify_strict(&payload_bytes, &signature)
+            .expect("attestation signature should verify");
     }
 }

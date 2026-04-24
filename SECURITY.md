@@ -9,7 +9,7 @@ triaged privately and a fix shipped before disclosure.
 ## Threat model summary
 
 Récupère is a desktop data-recovery tool that operates **strictly read-only**
-on the source disk. The threat model centres on three properties:
+on the source disk. The threat model centres on four properties:
 
 1. **Source integrity** — the application must never write to the source
    media. This is enforced by `core::preferred_imaging_source_path()` which
@@ -30,6 +30,22 @@ on the source disk. The threat model centres on three properties:
    offline against a public key embedded at compile time. The development
    placeholder key is rejected by `build.rs` for `--release` builds — the
    real key must be supplied via `RECUPERE_LICENSE_PUBKEY_HEX`.
+
+4. **Export attestability** — every successful local export writes a
+   `MANIFEST.json` in the export root. The manifest lists each exported
+   artifact, size, SHA-256, recovery method, available source offsets/runs,
+   application version, timestamp, and an Ed25519 signature over the manifest
+   payload. The signing key is generated locally and stored in the OS keyring
+   when available; if the keyring is unavailable, the manifest is still signed
+   with an explicitly marked ephemeral key so the export remains usable.
+
+### Export attestation limits
+
+The export manifest is an integrity and provenance artifact, not a notarized
+legal certificate. A key stored in the local OS keyring proves continuity of
+this Récupère installation, but it does not prove the operator's real-world
+identity. Enterprise/HSM signing, eIDAS-qualified signatures, and third-party
+timestamping remain future compliance work.
 
 ## Remote agents threat model
 

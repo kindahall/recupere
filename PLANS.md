@@ -77,6 +77,45 @@ Tout point encore incertain.
 
 # Plans actifs
 
+## Chantier 90 — Directives concurrentielles audit 2026-04-24
+**Objectif** : transformer les directives "depasser DiskDrill / R-Studio / TestDisk / EaseUS / Stellar / Recoverit" en livrables verifiables, en commencant par le differenciateur legal/forensic le plus concret : un manifeste d'export signe.
+
+**Hypotheses** :
+- les directives D1-D12 representent une roadmap produit de plusieurs semaines ; cette tranche ne doit pas pretendre fermer RAID 50/60, ZFS, OPAL/UFS ou open-core ;
+- D3 est deja partiellement couvert par `SECURITY.md` et le module Gemma/Ollama local, mais l'export signe D2 n'est pas encore materialise ;
+- l'attestation doit rester locale : aucune cle privee serveur, aucun cloud, aucun envoi de metadonnees.
+
+**Risques** :
+- une cle d'attestation locale stockee dans le keyring prouve la continuite de l'installation, pas une identite legale externe ;
+- le manifeste contient des noms et chemins exportes : il est ecrit dans la destination choisie par l'utilisateur, pas dans un canal support automatique ;
+- si le keyring OS est indisponible, l'export doit rester possible avec une signature ephemere explicitement marquee.
+
+**Modules impactes** :
+- `src-tauri/src/commands/export.rs` pour produire `MANIFEST.json` signe ;
+- `src-tauri/src/commands/tests.rs` pour verifier presence, hashes et signature ;
+- `docs/top-tier-roadmap.md` / `SECURITY.md` si une limite ou une preuve change.
+
+**Plan d'execution** :
+1. Ajouter une cle locale d'attestation Ed25519, persistee dans le keyring OS quand possible, ephemere sinon -> verification : test sans dependre du keyring.
+2. Collecter chaque artefact exporte (fichier principal, resource fork, ADS) avec taille, SHA-256, methode, statut et offsets/runs disponibles -> verification : test export existant etendu.
+3. Ecrire `MANIFEST.json` atomiquement dans la racine d'export, signe sur le payload canonique -> verification : lecture JSON + verification Ed25519 dans test.
+4. Tracer le chemin du manifeste dans les logs d'export et documenter la limite "cle locale, pas HSM" -> verification : logs + PLANS.
+
+**Criteres de validation** :
+- chaque export reussi avec au moins un fichier produit un `MANIFEST.json` ;
+- le manifeste contient au moins `schema`, `export_id`, `scan_id`, version app, timestamp, source hash, liste de fichiers, SHA-256, signature Ed25519 et public key ;
+- les tests Rust export restent verts, sans acces au disque source en ecriture.
+
+**Limites connues** :
+- pas encore de signature HSM, cle cabinet, certificat qualifie eIDAS ou workflow notarial ;
+- pas encore de typage read-only P2.1 ni de page marketing publique ;
+- les directives D4/D8/D12 restent des chantiers profonds, non fermes par cette tranche.
+
+**Statut 2026-04-24** :
+- termine pour la tranche D2 : `MANIFEST.json` signe Ed25519, hashes SHA-256, offsets/runs source disponibles, version app et timestamp ;
+- valide par tests Rust export, suite Rust complete, clippy, build UI, lint et benchmark manifest/results ;
+- D1/D4-D12 restent une roadmap produit documentee, sans promesse marketing prematuree.
+
 ## Chantier 89 — Corrections audit securite 2026-04-24
 **Objectif** : fermer les vulnerabilites P0/P1 applicables localement dans `AUDIT_SECURITE_2026_04_24.md` sans modifier le moteur de lecture source, et rendre les decisions importantes tracables par tests, preflight et logs.
 

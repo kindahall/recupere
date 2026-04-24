@@ -1648,6 +1648,33 @@ fn run_export_session_copies_cataloged_files_with_structure() {
         );
     }
 
+    let manifest_path = destination_root.join("MANIFEST.json");
+    assert!(manifest_path.exists(), "expected signed export manifest");
+    let manifest: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(&manifest_path).expect("manifest should be readable"),
+    )
+    .expect("manifest should be valid JSON");
+    assert_eq!(
+        manifest["payload"]["schema"],
+        "recupere.export-attestation.v1"
+    );
+    assert_eq!(manifest["payload"]["export_id"], "export-integration");
+    assert_eq!(manifest["payload"]["scan_id"], "scan-export-flow");
+    let manifest_files = manifest["payload"]["files"]
+        .as_array()
+        .expect("manifest files should be an array");
+    assert_eq!(manifest_files.len(), scanned_files.len());
+    assert!(manifest_files.iter().all(|entry| entry["sha256"]
+        .as_str()
+        .is_some_and(|hash| hash.len() == 64)));
+    assert_eq!(manifest["signature"]["algorithm"], "ed25519");
+    assert!(manifest["signature"]["public_key_hex"]
+        .as_str()
+        .is_some_and(|key| key.len() == 64));
+    assert!(manifest["signature"]["signature_hex"]
+        .as_str()
+        .is_some_and(|signature| signature.len() == 128));
+
     let _ = fs::remove_dir_all(source_root);
     let _ = fs::remove_dir_all(destination_root);
 }
