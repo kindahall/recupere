@@ -254,3 +254,7 @@ recupere/
 ## License
 
 Proprietary — All rights reserved.
+
+## Support
+
+If this project is useful to you, you can support its development with a free and entirely optional tip through the repository's **Sponsor** button. Thank you for your support.
